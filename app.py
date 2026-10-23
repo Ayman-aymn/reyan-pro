@@ -164,6 +164,10 @@ body{min-height:100vh;background:linear-gradient(135deg, #eef2ff 0%, #c7b8ff 100
     </div>
     <div id="downloadContainer" style="display:none">
       <button class="btn btn-download" id="downloadBtn">📥 تحميل الملف المترجم</button>
+      <div style="margin-top:15px;padding:15px;background:#fff7e6;border-radius:12px;border:1px solid #f0e0b0;color:#4a4a7a;font-size:14px;line-height:1.8;text-align:center">
+<strong>🤲 دعاء لأيمن:</strong><br>
+اللهم احفظ أيمن بعينك التي لا تنام، وارزقه الصحة والعافية وسعة الرزق، ووفقه لما تحب وترضى، واجعل ختام أمره خيرًا. آمين.
+</div>
     </div>
   </div>
 </div>
