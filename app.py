@@ -1,4 +1,4 @@
-import os, io, uuid, threading, time
+import os, io, uuid
 from flask import Flask, request, jsonify, send_file, render_template_string
 from pptx import Presentation
 from pptx.util import Pt, Inches
@@ -21,7 +21,6 @@ if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
     gemini_model = genai.GenerativeModel('gemini-1.5-flash')
 
-# === الخط العربي ===
 FONT_PATH = "/tmp/Amiri-Regular.ttf"
 if not os.path.exists(FONT_PATH):
     try:
@@ -34,7 +33,6 @@ def fix_ar(t):
     try: return get_display(arabic_reshaper.reshape(t))
     except: return t
 
-# === الترجمة باستخدام Gemini فقط ===
 def translate_text(text):
     if not GEMINI_KEY or len(text.strip()) < 2: return text
     try:
@@ -43,8 +41,7 @@ def translate_text(text):
         return resp.text.strip()
     except: return text
 
-# === OCR للصور باستخدام Gemini Vision ===
-def ocr_and_translate(image_bytes):
+def ocr_and_translate_image(image_bytes):
     if not GEMINI_KEY: return ""
     try:
         img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
@@ -55,7 +52,6 @@ def ocr_and_translate(image_bytes):
         print(e)
         return ""
 
-# === PPTX (نصوص + صور) ===
 def translate_pptx_bytes(data):
     prs = Presentation(io.BytesIO(data))
     slides = list(prs.slides)
@@ -63,7 +59,6 @@ def translate_pptx_bytes(data):
     if total == 0: return None
     for i, slide in enumerate(slides):
         for shape in slide.shapes:
-            # 1. ترجمة النصوص
             if shape.has_text_frame and shape.text.strip():
                 orig = shape.text.strip()
                 if len(orig) > 1:
@@ -75,12 +70,10 @@ def translate_pptx_bytes(data):
                         p.text = tr
                         p.font.size = Pt(18)
                         p.alignment = PP_ALIGN.RIGHT
-            
-            # 2. ترجمة الصور (OCR + ترجمة)
-            if shape.shape_type == 13: # Picture
+            if shape.shape_type == 13:
                 try:
                     image_bytes = shape.image.blob
-                    ocr_text = ocr_and_translate(image_bytes)
+                    ocr_text = ocr_and_translate_image(image_bytes)
                     if ocr_text:
                         box = slide.shapes.add_textbox(shape.left, shape.top + shape.height + Inches(0.1), shape.width, Inches(1))
                         box.text_frame.word_wrap = True
@@ -95,7 +88,6 @@ def translate_pptx_bytes(data):
     out.seek(0)
     return out
 
-# === PDF (نصوص فقط) ===
 def translate_pdf_bytes(data):
     doc = fitz.open(stream=data, filetype="pdf")
     out_bio = io.BytesIO()
@@ -116,17 +108,16 @@ def translate_pdf_bytes(data):
     out_bio.seek(0)
     return out_bio
 
-# === الواجهة (HTML) ===
 HTML_PAGE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>الريان للترجمة - Gemini</title>
+<title>الريان للترجمة</title>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
 <style>
-*{margin:0;padding:0;box-sizing:border-box;font-family:'Tajawal',sans-serif;-webkit-tap-highlight-color:transparent}
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Tajawal',sans-serif}
 body{min-height:100vh;background:radial-gradient(1200px 600px at 20% 0%, #eef2ff 0%, #d8e2ff 20%, #c9d5ff 40%, #c7b8ff 85%, #b8a6ff 100%);color:#2f365f;padding:20px}
 .app{max-width:440px;margin:0 auto;min-height:100vh;padding:12px 18px 100px}
 .header{display:flex;justify-content:space-between;align-items:center;padding:6px 4px;margin-bottom:10px}
@@ -139,7 +130,7 @@ body{min-height:100vh;background:radial-gradient(1200px 600px at 20% 0%, #eef2ff
 </head>
 <body>
 <div class="app">
-  <div class="header"><div class="logo">الريان للترجمة (Gemini)</div></div>
+  <div class="header"><div class="logo">الريان للترجمة</div></div>
   <div class="card">
     <h3 style="margin-bottom:10px">ترجمة نص</h3>
     <textarea id="inputText" class="textarea" placeholder="اكتب النص هنا..."></textarea>
@@ -163,7 +154,6 @@ window.translateText = async () => {
   const resultDiv = document.getElementById('resultText');
   resultDiv.style.display = 'block';
   resultDiv.innerText = 'جاري الترجمة...';
-  
   try {
     const res = await fetch('/translate', {
       method: 'POST',
@@ -172,9 +162,7 @@ window.translateText = async () => {
     });
     const data = await res.json();
     resultDiv.innerText = data.translation;
-  } catch(e) {
-    resultDiv.innerText = 'فشل الاتصال بالخادم';
-  }
+  } catch(e) { resultDiv.innerText = 'فشل الاتصال بالخادم'; }
 };
 </script>
 </body>
@@ -197,15 +185,14 @@ def upload():
     if 'file' not in request.files: return "لم يتم رفع ملف"
     file = request.files['file']
     if file.filename == '': return "اسم الملف فارغ"
-    
     if file.filename.lower().endswith('.pptx'):
         data = file.read()
         bio = translate_pptx_bytes(data)
-        return send_file(bio, as_attachment=True, download_name="translated.pptx", mimetype="application/vnd.openxmlformats-officedocument.presentationml.presentation")
+        return send_file(bio, as_attachment=True, download_name="translated.pptx")
     elif file.filename.lower().endswith('.pdf'):
         data = file.read()
         bio = translate_pdf_bytes(data)
-        return send_file(bio, as_attachment=True, download_name="translated.pdf", mimetype="application/pdf")
+        return send_file(bio, as_attachment=True, download_name="translated.pdf")
     return "الملف يجب أن يكون PDF أو PPTX"
 
 if __name__ == '__main__':
