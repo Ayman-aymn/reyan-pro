@@ -1,21 +1,19 @@
-import os, io, uuid, threading, time, tempfile
+import os, io, uuid, threading, tempfile
 from flask import Flask, request, jsonify, send_file, render_template_string
-from collections import OrderedDict
 from pptx import Presentation
 from pptx.util import Pt, Inches
 from pptx.enum.text import PP_ALIGN
-import fitz, requests, arabic_reshaper
+import fitz, arabic_reshaper
 from bidi.algorithm import get_display
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.pagesizes import letter
+from PIL import Image
 import google.generativeai as genai
 
 app = Flask(__name__)
-# === حل مشكلة 100MB ===
-app.config['MAX_CONTENT_LENGTH'] = 120 * 1024 * 1024  # 120MB مسموح
+app.config['MAX_CONTENT_LENGTH'] = 120 * 1024 * 1024
 
-DEEPL_KEY = os.environ.get('DEEPL_API_KEY')
 GEMINI_KEY = os.environ.get('GEMINI_API_KEY')
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
@@ -27,89 +25,110 @@ def fix_ar(t):
     try: return get_display(arabic_reshaper.reshape(t))
     except: return t
 
-def translate_smart(text):
-    if not text.strip(): return text
+def translate_text_only(text):
+    if not text.strip() or len(text.strip())<2: return text
     try:
-        prompt = f"Translate to formal Arabic only, auto-detect source language:\n\n{text}"
-        return genai.GenerativeModel('gemini-1.5-flash').generate_content(prompt).text.strip()
+        prompt = f"Translate this to formal Arabic only, auto-detect source language, no explanation:\n\n{text}"
+        return gemini_model.generate_content(prompt).text.strip()
     except: return text
+
+def ocr_and_translate_image(image_bytes):
+    if not GEMINI_KEY: return ""
+    try:
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        prompt = "Extract any text in this image, translate it to formal Arabic. Return in format:\nORIGINAL: [text]\nARABIC: [translation]\nIf no text, return empty."
+        resp = gemini_model.generate_content([prompt, img])
+        txt = resp.text.strip()
+        return txt if txt and "empty" not in txt.lower() else ""
+    except Exception as e:
+        print("OCR error:", e)
+        return ""
 
 def process_job(job_id, tmp_path, filename):
     try:
         JOBS[job_id]['status']='working'
-        ext = filename.lower()
-        if ext.endswith('.pptx'):
-            # نقرا من الملف في الهارد مش الرام
+        if filename.lower().endswith('.pptx'):
             prs = Presentation(tmp_path)
-            total = sum(1 for s in prs.slides for sh in s.shapes if sh.has_text_frame and sh.text.strip())
+            total_shapes = sum(len(list(s.shapes)) for s in prs.slides)
             done=0
             for slide in prs.slides:
                 for shape in list(slide.shapes):
+                    # نص
                     if shape.has_text_frame and shape.text.strip():
-                        orig=shape.text.strip()
-                        if len(orig)>1 and len(orig)<500: # ما نترجم نص طويل شديد مرة واحدة
-                            tr=translate_smart(orig)
-                            if tr!=orig:
+                        orig = shape.text.strip()
+                        if 1 < len(orig) < 1000:
+                            tr = translate_text_only(orig)
+                            if tr != orig:
                                 try:
-                                    box=slide.shapes.add_textbox(shape.left, shape.top+shape.height+Pt(5), shape.width, Inches(0.6))
+                                    box = slide.shapes.add_textbox(shape.left, shape.top + shape.height + Pt(5), shape.width, Inches(0.8))
                                     box.text_frame.word_wrap=True
                                     p=box.text_frame.paragraphs[0]
-                                    p.text=tr; p.font.size=Pt(14); p.alignment=PP_ALIGN.RIGHT
+                                    p.text=tr; p.font.size=Pt(16); p.alignment=PP_ALIGN.RIGHT
                                 except: pass
-                            done+=1
-                            JOBS[job_id]['progress']=int(done/max(total,1)*100)
+                    # صورة - الميزة الجديدة
+                    if shape.shape_type == 13 or hasattr(shape, "image"):
+                        try:
+                            image_bytes = shape.image.blob
+                            ocr_result = ocr_and_translate_image(image_bytes)
+                            if ocr_result:
+                                box = slide.shapes.add_textbox(shape.left, shape.top + shape.height + Inches(0.1), shape.width, Inches(1.2))
+                                box.text_frame.word_wrap=True
+                                p=box.text_frame.paragraphs[0]
+                                p.text=ocr_result; p.font.size=Pt(12); p.alignment=PP_ALIGN.RIGHT
+                        except: pass
+                    done+=1
+                    if total_shapes>0:
+                        JOBS[job_id]['progress']=int(done/total_shapes*90)
             out_path = tmp_path + "_out.pptx"
             prs.save(out_path)
             JOBS[job_id]['file_path']=out_path
-            JOBS[job_id]['filename']='translated.pptx'
+            JOBS[job_id]['filename']='translated_with_images.pptx'
         else:
             doc=fitz.open(tmp_path)
             out_bio=io.BytesIO()
             templ=SimpleDocTemplate(out_bio, pagesize=letter)
             s1=ParagraphStyle('o', fontSize=11); s2=ParagraphStyle('a', fontSize=12, alignment=2)
-            story=[]; pages=len(doc)
+            story=[]
             for i, page in enumerate(doc):
                 txt=page.get_text("text")
                 for line in txt.split('\n'):
                     if line.strip():
                         story.append(Paragraph(line[:500], s1))
-                        story.append(Paragraph(fix_ar(translate_smart(line[:500])), s2))
-                JOBS[job_id]['progress']=int((i+1)/pages*100)
+                        story.append(Paragraph(fix_ar(translate_text_only(line[:500])), s2))
+                JOBS[job_id]['progress']=int((i+1)/len(doc)*90)
             templ.build(story); out_bio.seek(0)
             out_path = tmp_path + "_out.pdf"
             open(out_path,'wb').write(out_bio.read())
             JOBS[job_id]['file_path']=out_path
             JOBS[job_id]['filename']='translated.pdf'
         JOBS[job_id]['progress']=100; JOBS[job_id]['status']='done'
-        # امسح الملف الأصلي عشان نوفر مساحة
         try: os.remove(tmp_path)
         except: pass
     except Exception as e:
-        JOBS[job_id]['status']=f'error: {e}'; JOBS[job_id]['progress']=0
+        JOBS[job_id]['status']=f'error: {e}'; print(e)
 
-HTML_PAGE = """
-<!DOCTYPE html><html dir=rtl lang=ar><head><meta charset=utf-8>
-<meta name=viewport content="width=device-width,initial-scale=1">
-<title>الريان - 120MB</title>
+HTML = """
+<!DOCTYPE html><html dir=rtl lang=ar><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
+<title>الريان - Gemini Vision</title>
 <style>body{font-family:sans-serif;background:#eef2ff;padding:20px}
-.card{max-width:600px;margin:auto;background:#fff;padding:20px;border-radius:16px}
+.card{max-width:600px;margin:auto;background:#fff;padding:20px;border-radius:16px;box-shadow:0 8px 20px #0001}
 button{width:100%;height:50px;background:#6c5cff;color:#fff;border:none;border-radius:12px;font-size:18px}
 #bar{height:20px;background:#eee;border-radius:10px;overflow:hidden;margin-top:15px;display:none}
-#fill{height:100%;width:0%;background:#6c5cff;transition:0.3s}</style></head><body>
+#fill{height:100%;width:0%;background:#6c5cff;transition:0.3s}
+</style></head><body>
 <div class=card>
-<h2>الريان - يدعم حتى 100MB مع الصوت</h2>
+<h2>الريان - يترجم النصوص والصور</h2>
 <input type=file id=file accept=.pdf,.pptx><br><br>
 <button onclick=upload()>رفع وترجمة</button>
 <div id=bar><div id=fill></div></div><p id=status></p>
 <div id=actions style=display:none>
-<button id=dl onclick=download()>تحميل الملف المترجم</button>
-<div id=dua style=margin-top:20px;background:#fff7e6;padding:15px;border-radius:10px;display:none"></div>
+<button onclick=download()>تحميل الملف</button>
+<div id=dua style=margin-top:20px;background:#fff7e6;padding:15px;border-radius:10px"></div>
 </div></div>
 <script>
 let jobId=null;
 async function upload(){
  let f=document.getElementById('file').files[0]; if(!f) return alert('اختار ملف');
- if(f.size>120*1024*1024) return alert('الملف أكبر من 120MB');
  let fd=new FormData(); fd.append('file',f);
  let r=await fetch('/upload',{method:'POST',body:fd}); let j=await r.json(); jobId=j.job_id;
  document.getElementById('bar').style.display='block'; poll();
@@ -117,10 +136,9 @@ async function upload(){
 async function poll(){
  let r=await fetch('/progress/'+jobId); let j=await r.json();
  document.getElementById('fill').style.width=j.progress+'%';
- document.getElementById('status').innerText='التقدم: '+j.progress+'% - '+j.status;
+ document.getElementById('status').innerText=j.progress+'% - '+j.status;
  if(j.status=='done'){ document.getElementById('actions').style.display='block';
-   document.getElementById('dua').style.display='block';
-   document.getElementById('dua').innerHTML="اللهم وفق عبدك <b>أيمن</b> لما تحب وترضى، اللهم سهل له كل عسير واجعله من الناجحين<br><br>ولا تنس أن <b>تصلي على النبي ﷺ</b>"; 
+  document.getElementById('dua').innerHTML="اللهم وفق عبدك <b>أيمن</b> لما تحب وترضى، اللهم سهل له كل عسير واجعله من الناجحين<br><br>ولا تنس أن <b>تصلي على النبي ﷺ</b>"; 
  } else if(j.status.includes('error')){ document.getElementById('status').innerText=j.status }
  else setTimeout(poll,1000);
 }
@@ -129,35 +147,25 @@ function download(){ window.location='/download/'+jobId; }
 """
 
 @app.route('/')
-def home(): return render_template_string(HTML_PAGE)
-
+def home(): return render_template_string(HTML)
 @app.route('/upload', methods=['POST'])
-def upload():
+def up():
     f=request.files.get('file')
     if not f: return jsonify({"error":"no file"}),400
-    # حماية 2: نحفظ في /tmp مش في الرام
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(f.filename)[1])
-    f.save(tmp.name)
-    tmp.close()
+    f.save(tmp.name); tmp.close()
     job_id=str(uuid.uuid4())[:8]
-    JOBS[job_id]={'progress':0,'status':'queued','file_path':None,'filename':'','text':''}
+    JOBS[job_id]={'progress':0,'status':'queued','file_path':None}
     threading.Thread(target=process_job, args=(job_id, tmp.name, f.filename), daemon=True).start()
     return jsonify({"job_id":job_id})
-
-@app.route('/progress/<job_id>')
-def progress(job_id):
-    j=JOBS.get(job_id)
-    if not j: return jsonify({"error":"not found"}),404
-    return jsonify({"progress":j['progress'],"status":j['status']})
-
-@app.route('/download/<job_id>')
-def download_file(job_id):
-    j=JOBS.get(job_id)
+@app.route('/progress/<jid>')
+def prog(jid): return jsonify(JOBS.get(jid,{"progress":0,"status":"not found"}))
+@app.route('/download/<jid>')
+def dl(jid):
+    j=JOBS.get(jid)
     if not j or j['status']!='done': return "not ready",404
     return send_file(j['file_path'], as_attachment=True, download_name=j['filename'])
-
 @app.route('/ping')
 def ping(): return jsonify({"ok":True})
 
-if __name__=='__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT',10000)))
+if __name__=='__main__': app.run(host='0.0.0.0', port=int(os.environ.get('PORT',10000)))
