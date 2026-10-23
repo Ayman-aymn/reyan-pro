@@ -3,7 +3,7 @@ from flask import Flask, request, jsonify, send_file, render_template_string
 from pptx import Presentation
 from pptx.util import Pt, Inches
 from pptx.enum.text import PP_ALIGN
-import fitz, arabic_reshaper
+import fitz, requests, arabic_reshaper
 from bidi.algorithm import get_display
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import ParagraphStyle
@@ -16,7 +16,10 @@ import google.generativeai as genai
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 120 * 1024 * 1024
 
+# === المفاتيح ===
+DEEPL_KEY = os.environ.get('DEEPL_API_KEY')
 GEMINI_KEY = os.environ.get('GEMINI_API_KEY')
+
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
     gemini_model = genai.GenerativeModel('gemini-1.5-flash')
@@ -33,31 +36,42 @@ def fix_ar(t):
     try: return get_display(arabic_reshaper.reshape(t))
     except: return t
 
+# === الترجمة: DeepL أولاً، ثم Gemini ===
 def translate_text(text):
-    if not GEMINI_KEY or len(text.strip()) < 2: return text
-    try:
-        prompt = f"ترجم هذا النص من الإنجليزية للعربية الفصحى الأكاديمية بدقة، بدون شرح، فقط الترجمة:\n\n{text}"
-        resp = gemini_model.generate_content(prompt)
-        return resp.text.strip()
-    except: return text
+    if not text.strip(): return text
+    # 1. DeepL
+    if DEEPL_KEY:
+        try:
+            r = requests.post("https://api-free.deepl.com/v2/translate",
+                headers={"Authorization": f"DeepL-Auth-Key {DEEPL_KEY}"},
+                json={"text": [text], "target_lang": "AR"}, timeout=20)
+            if r.status_code == 200:
+                return r.json()['translations'][0]['text']
+        except: pass
+    # 2. Gemini
+    if GEMINI_KEY:
+        try:
+            prompt = f"Translate to formal Arabic only, no explanation:\n\n{text}"
+            return gemini_model.generate_content(prompt).text.strip()
+        except: pass
+    return text
 
+# === OCR للصور ===
 def ocr_and_translate_image(image_bytes):
     if not GEMINI_KEY: return ""
     try:
         img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-        prompt = "استخرج النص من هذه الصورة، ثم ترجمه إلى العربية الفصحى. اكتب النص الأصلي ثم الترجمة."
+        prompt = "Extract text from this image, translate to Arabic, return original and translation."
         resp = gemini_model.generate_content([prompt, img])
         return resp.text.strip()
     except Exception as e:
-        print(e)
+        print("OCR error:", e)
         return ""
 
+# === PPTX ===
 def translate_pptx_bytes(data):
     prs = Presentation(io.BytesIO(data))
-    slides = list(prs.slides)
-    total = len(slides)
-    if total == 0: return None
-    for i, slide in enumerate(slides):
+    for slide in prs.slides:
         for shape in slide.shapes:
             if shape.has_text_frame and shape.text.strip():
                 orig = shape.text.strip()
@@ -81,13 +95,13 @@ def translate_pptx_bytes(data):
                         p.text = ocr_text
                         p.font.size = Pt(14)
                         p.alignment = PP_ALIGN.RIGHT
-                except Exception as e:
-                    print(e)
+                except: pass
     out = io.BytesIO()
     prs.save(out)
     out.seek(0)
     return out
 
+# === PDF ===
 def translate_pdf_bytes(data):
     doc = fitz.open(stream=data, filetype="pdf")
     out_bio = io.BytesIO()
@@ -108,6 +122,7 @@ def translate_pdf_bytes(data):
     out_bio.seek(0)
     return out_bio
 
+# === الواجهة ===
 HTML_PAGE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
