@@ -1,10 +1,4 @@
-Flask
-python-pptx
-requests
-supabase
-gunicorn==21.2.0
-PyMuPDF==1.23.7
-python-bidi==0.4.2
-arabic-reshaper
-Pillow
+Flask==3.0.0
+python-pptx==1.0.2
 google-generativeai
+gunicorn
