@@ -128,14 +128,12 @@ def translate_text(text):
         except: continue
     return text
 
-# ===== ترجمة الصور باستخدام Gemini =====
 def translate_image_with_gemini(image_bytes):
+    import base64
+    img_b64 = base64.b64encode(image_bytes).decode('utf-8')
     for model_name in MODELS_TO_TRY:
         try:
             model = genai.GenerativeModel(model_name)
-            # تحويل الصورة إلى جزء يمكن إرساله
-            import base64
-            img_b64 = base64.b64encode(image_bytes).decode('utf-8')
             prompt = "استخرج النص من هذه الصورة وترجمه إلى العربية. أعد الترجمة فقط."
             resp = model.generate_content(
                 [{'mime_type': 'image/jpeg', 'data': img_b64}, prompt],
@@ -143,7 +141,7 @@ def translate_image_with_gemini(image_bytes):
             )
             if resp.text: return resp.text.strip()
         except Exception as e:
-            print(f"Image translation error with {model_name}: {e}")
+            print(f"Image translation error: {e}")
             continue
     return None
 
@@ -154,7 +152,6 @@ def process_pptx(job_id, data, translate_images=False):
         if total > MAX_PAGES: JOBS[job_id]['status'] = 'error: الحد الأقصى 100 شريحة'; return
         
         for i, slide in enumerate(prs.slides):
-            # ترجمة النصوص
             for shape in slide.shapes:
                 if shape.has_text_frame and shape.text.strip():
                     orig = shape.text.strip()
@@ -165,19 +162,16 @@ def process_pptx(job_id, data, translate_images=False):
                             p.text = tr; p.font.size = Pt(28); p.font.name = 'Arial'
                             p.alignment = PP_ALIGN.RIGHT; p.space_before = Pt(10)
                 
-                # ترجمة الصور (إذا طلب المستخدم)
-                if translate_images and shape.shape_type == 13: # 13 = صورة
+                if translate_images and shape.shape_type == 13:
                     try:
                         image_bytes = shape.image.blob
                         translated_text = translate_image_with_gemini(image_bytes)
                         if translated_text:
-                            # إضافة النص المترجم كفقرة تحت الصورة
                             if not shape.has_text_frame:
                                 shape.text_frame.text = ""
                             p = shape.text_frame.add_paragraph()
                             p.text = translated_text
-                            p.font.size = Pt(14)
-                            p.font.name = 'Arial'
+                            p.font.size = Pt(14); p.font.name = 'Arial'
                             p.alignment = PP_ALIGN.RIGHT
                     except Exception as e:
                         print(f"Error processing image: {e}")
@@ -202,7 +196,6 @@ def process_pdf(job_id, data, translate_images=False):
         story = []
         
         for i, page in enumerate(doc):
-            # ترجمة النصوص
             txt = page.get_text("text").strip()
             if txt:
                 for line in txt.split('\n'):
@@ -212,7 +205,6 @@ def process_pdf(job_id, data, translate_images=False):
                         story.append(Paragraph(fix_ar(tr), s2))
                         story.append(Spacer(1, 8))
             
-            # ترجمة الصور
             if translate_images:
                 for img_index, img in enumerate(page.get_images(full=True)):
                     try:
@@ -234,7 +226,6 @@ def process_pdf(job_id, data, translate_images=False):
     except Exception as e:
         JOBS[job_id]['status'] = f'error: {str(e)[:100]}'
 
-# ===== الواجهة الرئيسية (محدثة بخيار ترجمة الصور) =====
 HTML_PAGE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -267,7 +258,7 @@ body{min-height:100vh;background:linear-gradient(135deg, #eef2ff 0%, #c7b8ff 100
       <input type="file" name="file" accept=".pptx,.pdf" required style="width:100%;margin-bottom:10px">
       <div class="checkbox">
         <input type="checkbox" id="translateImages">
-        <label for="translateImages">ترجمة الصور أيضاً (أبطأ، يستهلك المزيد من الموارد)</label>
+        <label for="translateImages">ترجمة الصور أيضاً (أبطأ)</label>
       </div>
       <button type="submit" class="btn" id="submitBtn">ترجمة الملف</button>
     </form>
@@ -360,7 +351,6 @@ function goChat() {
 </html>
 """
 
-# ===== صفحة المساعد =====
 CHAT_PAGE = """
 <!DOCTYPE html>
 <html dir="rtl">
