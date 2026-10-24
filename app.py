@@ -69,7 +69,7 @@ SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmF
 
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
-    gemini_model = genai.GenerativeModel('gemini-pro')
+    gemini_model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
 supabase = None
 try: supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
