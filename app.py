@@ -289,3 +289,16 @@ def admin_dashboard():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
+
+@app.route('/check-models-secret')
+def check_models():
+    import google.generativeai as genai
+    try:
+        genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
+        models = []
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                models.append(m.name)
+        return f"<h3>النماذج المتاحة:</h3><pre>{'<br>'.join(models)}</pre>"
+    except Exception as e:
+        return f"<h3>خطأ:</h3><pre>{str(e)}</pre>"
