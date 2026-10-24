@@ -147,23 +147,45 @@ def translate_batch(texts):
         results.append(translate_text(text))
     return results
 
-def translate_image_with_gemini(image_bytes):
-    try:
-        img_b64 = base64.b64encode(image_bytes).decode('utf-8')
-        for model_name in MODELS_TO_TRY:
-            try:
-                model = genai.GenerativeModel(model_name)
-                prompt = "استخرج النص من هذه الصورة وترجمه إلى العربية. أعد الترجمة فقط."
-                resp = model.generate_content(
-                    [{'mime_type': 'image/jpeg', 'data': img_b64}, prompt],
-                    request_options={"timeout": 30}
-                )
-                if resp.text: return resp.text.strip()
-            except: continue
-    except: pass
-    return None
+# ===== ترجمة دفعة صور باستخدام Gemini =====
+def translate_images_batch(image_bytes_list):
+    if not image_bytes_list: return []
+    
+    # تحويل الصور إلى base64
+    images_data = []
+    for img_bytes in image_bytes_list:
+        img_b64 = base64.b64encode(img_bytes).decode('utf-8')
+        images_data.append({'mime_type': 'image/jpeg', 'data': img_b64})
+    
+    for model_name in MODELS_TO_TRY:
+        try:
+            model = genai.GenerativeModel(model_name)
+            prompt = "استخرج النص من كل صورة من هذه الصور وترجمه إلى العربية. أعد النتائج كقائمة (JSON array) بنفس ترتيب الصور، كل عنصر يحتوي على الترجمة فقط."
+            
+            # إرسال كل الصور معاً
+            content = images_data + [prompt]
+            resp = model.generate_content(content, request_options={"timeout": 60})
+            
+            if resp.text:
+                try:
+                    import json
+                    cleaned = resp.text.strip()
+                    if cleaned.startswith('```'):
+                        cleaned = cleaned.split('```')[1]
+                        if cleaned.startswith('json'):
+                            cleaned = cleaned[4:]
+                        cleaned = cleaned.strip()
+                    result = json.loads(cleaned)
+                    if isinstance(result, list) and len(result) == len(image_bytes_list):
+                        return result
+                except:
+                    # إذا فشل JSON، نعيد النص كاملاً
+                    return [resp.text.strip()] * len(image_bytes_list)
+        except: continue
+    
+    return [None] * len(image_bytes_list)
 
-# ===== PPTX (الترجمة القديمة + مربع نص للصور) =====
+# ===== PPTX: الترجمة أسفل كل صورة =====
 def process_pptx(job_id, data, translate_images=False):
     try:
         prs = Presentation(io.BytesIO(data))
@@ -171,7 +193,7 @@ def process_pptx(job_id, data, translate_images=False):
         if total > MAX_PAGES: JOBS[job_id]['status'] = 'error: الحد الأقصى 100 شريحة'; return
         
         for i, slide in enumerate(prs.slides):
-            # ترجمة النصوص
+            # 1. ترجمة النصوص العادية
             for shape in slide.shapes:
                 if shape.has_text_frame and shape.text.strip():
                     orig = shape.text.strip()
@@ -185,33 +207,47 @@ def process_pptx(job_id, data, translate_images=False):
                             p.alignment = PP_ALIGN.RIGHT
                             p.space_before = Pt(10)
             
-            # ترجمة الصور (إضافة مربع نص كبير)
+            # 2. ترجمة الصور (دفعة واحدة لكل شريحة)
             if translate_images:
-                image_translations = []
+                image_shapes = []
+                image_bytes_list = []
                 for shape in slide.shapes:
                     if shape.shape_type == 13:
                         try:
                             image_bytes = shape.image.blob
-                            translated_text = translate_image_with_gemini(image_bytes)
-                            if translated_text:
-                                image_translations.append(translated_text)
+                            image_shapes.append(shape)
+                            image_bytes_list.append(image_bytes)
                         except: pass
                 
-                if image_translations:
-                    left = Pt(20); top = Pt(400); width = Pt(600); height = Pt(150)
-                    txBox = slide.shapes.add_textbox(left, top, width, height)
-                    tf = txBox.text_frame
-                    tf.word_wrap = True
-                    tf.text = "ترجمة الصور:"
-                    tf.paragraphs[0].font.size = Pt(20)
-                    tf.paragraphs[0].font.name = 'Arial'
-                    tf.paragraphs[0].alignment = PP_ALIGN.RIGHT
-                    for tr in image_translations:
-                        p = tf.add_paragraph()
-                        p.text = tr
-                        p.font.size = Pt(18)
-                        p.font.name = 'Arial'
-                        p.alignment = PP_ALIGN.RIGHT
+                if image_bytes_list:
+                    translated_texts = translate_images_batch(image_bytes_list)
+                    for shape, translated_text in zip(image_shapes, translated_texts):
+                        if translated_text:
+                            try:
+                                left = shape.left
+                                top = shape.top
+                                width = shape.width
+                                height = shape.height
+                                
+                                textbox_top = top + height + Pt(10)
+                                textbox_left = left
+                                textbox_width = width
+                                textbox_height = Pt(60)
+                                
+                                txBox = slide.shapes.add_textbox(textbox_left, textbox_top, textbox_width, textbox_height)
+                                tf = txBox.text_frame
+                                tf.word_wrap = True
+                                tf.text = "ترجمة الصورة:"
+                                tf.paragraphs[0].font.size = Pt(16)
+                                tf.paragraphs[0].font.name = 'Arial'
+                                tf.paragraphs[0].alignment = PP_ALIGN.RIGHT
+                                
+                                p = tf.add_paragraph()
+                                p.text = translated_text
+                                p.font.size = Pt(18)
+                                p.font.name = 'Arial'
+                                p.alignment = PP_ALIGN.RIGHT
+                            except: pass
             
             JOBS[job_id]['progress'] = int(((i+1)/total)*100)
             JOBS[job_id]['stage'] = f'ترجمة الشريحة {i+1} من {total}'
@@ -226,7 +262,7 @@ def process_pptx(job_id, data, translate_images=False):
     except Exception as e:
         JOBS[job_id]['status'] = f'error: {str(e)[:100]}'
 
-# ===== PDF (إنشاء ملف جديد) =====
+# ===== PDF: إنشاء ملف جديد =====
 def process_pdf(job_id, data, translate_images=False):
     try:
         doc = fitz.open(stream=data, filetype="pdf")
@@ -251,17 +287,20 @@ def process_pdf(job_id, data, translate_images=False):
                         story.append(Spacer(1, 8))
             
             if translate_images:
+                images_to_translate = []
                 for img_index, img in enumerate(page.get_images(full=True)):
                     try:
                         xref = img[0]
                         base_image = doc.extract_image(xref)
-                        image_bytes = base_image["image"]
-                        translated_text = translate_image_with_gemini(image_bytes)
+                        images_to_translate.append(base_image["image"])
+                    except: pass
+                
+                if images_to_translate:
+                    translated_texts = translate_images_batch(images_to_translate)
+                    for idx, translated_text in enumerate(translated_texts):
                         if translated_text:
-                            story.append(Paragraph(f"[ترجمة الصورة {img_index+1}]: {fix_ar(translated_text)}", s_ar))
+                            story.append(Paragraph(f"[ترجمة الصورة {idx+1}]: {fix_ar(translated_text)}", s_ar))
                             story.append(Spacer(1, 8))
-                    except Exception as e:
-                        print(f"Error processing PDF image: {e}")
             
             JOBS[job_id]['progress'] = int(((i+1)/total)*100)
             JOBS[job_id]['stage'] = f'ترجمة الصفحة {i+1} من {total}'
@@ -351,7 +390,6 @@ body{min-height:100vh;background:linear-gradient(135deg, #eef2ff 0%, #c7b8ff 100
   </div>
 </div>
 <script>
-// حفظ التفضيلات
 document.addEventListener('DOMContentLoaded', () => {
     const savedPref = localStorage.getItem('translateImages');
     if(savedPref === 'true') document.getElementById('translateImages').checked = true;
@@ -419,8 +457,6 @@ function goChat() {
     if(q) window.location.href = '/chat_page?q=' + encodeURIComponent(q);
     else window.location.href = '/chat_page';
 }
-
-// الترجمة السريعة
 async function quickTranslate() {
     const text = document.getElementById('quickText').value.trim();
     if(!text) return;
