@@ -1,4 +1,4 @@
-import os, io, uuid, json, threading, time
+import os, io, uuid, json, threading, time, re
 from flask import Flask, request, jsonify, send_file, render_template_string
 from pptx import Presentation
 from pptx.util import Pt
@@ -15,33 +15,45 @@ from reportlab.pdfbase.ttfonts import TTFont
 from functools import wraps
 from collections import defaultdict
 from supabase import create_client
+import google.generativeai as genai
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 
+# ===== إعدادات الحماية =====
+ADMIN_USER = 'admin'
+ADMIN_PASS = 'Rayan_Secret_2026_!@#' # كلمة مرور لوحة التحكم (احتفظ بها)
+MAX_CHAT_LEN = 1000 # أقصى طول لرسالة المحادثة
+
+# ===== حماية الترويسات (Headers) =====
 @app.after_request
 def add_security_headers(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
-    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-XSS-Protection'] = '1; mode=block'
     response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    response.headers['Content-Security-Policy'] = "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; img-src 'self' data:;"
     return response
 
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
+# ===== حماية لوحة التحكم (Basic Auth) =====
+def check_auth(username, password):
+    return username == ADMIN_USER and password == ADMIN_PASS
 
+def authenticate():
+    return app.response_class(
+        'ممنوع الدخول. هذه المنطقة محمية.', 401,
+        {'WWW-Authenticate': 'Basic realm="Login Required"'}
+    )
+
+# ===== الإعدادات =====
 DEEPL_KEY = os.environ.get('DEEPL_API_KEY')
 GEMINI_KEY = os.environ.get('GEMINI_API_KEY')
-
-if GEMINI_KEY:
-    import google.generativeai as genai
-    genai.configure(api_key=GEMINI_KEY)
-    gemini_model = genai.GenerativeModel('gemini-1.5-flash')
-
-
-
-from supabase import create_client
-
 SUPABASE_URL = 'https://lmgshabrtmvbnpdhkkst.supabase.co'
 SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtZ3NoYWJydG12Ym5wZGhra3N0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjYxNzgyMSwiZXhwIjoyMTA4MTkzODIxfQ.H8-yzWt9XlQEpKFfzSJxXey48u222UGcl5NuvCtATcA'
+
+if GEMINI_KEY:
+    genai.configure(api_key=GEMINI_KEY)
+    gemini_model = genai.GenerativeModel('gemini-1.5-flash')
 
 supabase = None
 try:
@@ -59,25 +71,33 @@ def increment_stat(field):
     except Exception as e:
         print('Stat error:', e)
 
+# ===== الحماية من إغراق الطلبات (Rate Limiting) =====
+RATE_LIMIT = defaultdict(list)
+MAX_REQUESTS_PER_HOUR = 10
+
+def rate_limit(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        ip = request.remote_addr
+        now = time.time()
+        RATE_LIMIT[ip] = [t for t in RATE_LIMIT[ip] if now - t < 3600]
+        if len(RATE_LIMIT[ip]) >= MAX_REQUESTS_PER_HOUR:
+            return jsonify({"error": "لقد تجاوزت الحد المسموح. حاول لاحقاً."}), 429
+        RATE_LIMIT[ip].append(now)
+        return f(*args, **kwargs)
+    return decorated
+
 JOBS = {}
 
+# ===== الخط العربي =====
 FONT_PATH = "/tmp/Amiri-Regular.ttf"
+if not os.path.exists(FONT_PATH):
+    try:
+        import urllib.request
+        urllib.request.urlretrieve("https://github.com/aliftype/amiri/raw/main/Amiri-Regular.ttf", FONT_PATH)
+    except Exception as e:
+        print(f"Font download error: {e}")
 
-def ensure_font():
-    if os.path.exists(FONT_PATH): return True
-    urls = [
-        "https://github.com/aliftype/amiri/raw/main/Amiri-Regular.ttf",
-        "https://raw.githubusercontent.com/aliftype/amiri/main/Amiri-Regular.ttf"
-    ]
-    for u in urls:
-        try:
-            import urllib.request
-            urllib.request.urlretrieve(u, FONT_PATH)
-            if os.path.exists(FONT_PATH): return True
-        except: pass
-    return False
-
-ensure_font()
 try:
     pdfmetrics.registerFont(TTFont('Amiri', FONT_PATH))
     ARABIC_FONT = 'Amiri'
@@ -88,6 +108,7 @@ def fix_ar(t):
     try: return get_display(arabic_reshaper.reshape(t))
     except: return t
 
+# ===== دالة الترجمة =====
 def translate_text(text):
     if not text.strip(): return text
     if DEEPL_KEY:
@@ -104,6 +125,7 @@ def translate_text(text):
         except: pass
     return text
 
+# ===== معالجة الملفات =====
 def process_pptx(job_id, data):
     try:
         prs = Presentation(io.BytesIO(data))
@@ -129,7 +151,7 @@ def process_pptx(job_id, data):
         JOBS[job_id]['status'] = 'done'
         JOBS[job_id]['progress'] = 100
     except Exception as e:
-        JOBS[job_id]['status'] = f'error: {e}'
+        JOBS[job_id]['status'] = f'error: حدث خطأ في المعالجة'
 
 def process_pdf(job_id, data):
     try:
@@ -156,8 +178,9 @@ def process_pdf(job_id, data):
         JOBS[job_id]['status'] = 'done'
         JOBS[job_id]['progress'] = 100
     except Exception as e:
-        JOBS[job_id]['status'] = f'error: {e}'
+        JOBS[job_id]['status'] = f'error: حدث خطأ في المعالجة'
 
+# ===== الواجهة الرئيسية =====
 HTML_PAGE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -170,16 +193,15 @@ HTML_PAGE = """
 *{margin:0;padding:0;box-sizing:border-box;font-family:'Tajawal',sans-serif}
 body{min-height:100vh;background:linear-gradient(135deg, #eef2ff 0%, #c7b8ff 100%);color:#2f365f;padding:20px;display:flex;justify-content:center;align-items:center}
 .app{max-width:440px;width:100%;padding:20px}
-.card{background:rgba(255,255,255,0.9);border-radius:20px;padding:20px;box-shadow:0 8px 20px rgba(120,130,220,0.1);text-align:center}
+.card{background:rgba(255,255,255,0.9);border-radius:20px;padding:20px;box-shadow:0 8px 20px rgba(120,130,220,0.1);text-align:center;margin-bottom:15px}
 .btn{width:100%;height:48px;border-radius:16px;border:none;background:linear-gradient(135deg,#7c8aff,#8b5cf6);color:#fff;font-weight:800;font-size:16px;cursor:pointer;margin-top:10px}
 .btn:disabled{opacity:0.5;cursor:not-allowed}
 .btn-download{background:linear-gradient(135deg,#22c55e,#16a34a)}
 .progress-container{display:flex;justify-content:center;margin:20px 0}
 .progress-circle{width:120px;height:120px;border-radius:50%;background:conic-gradient(#7c8aff 0deg, #ddd 0deg);display:flex;justify-content:center;align-items:center;transition:background 0.3s}
 .progress-inner{width:100px;height:100px;border-radius:50%;background:#fff;display:flex;justify-content:center;align-items:center;font-size:24px;font-weight:900;color:#5b5bd6}
+.dua{margin-top:15px;padding:15px;background:#fff7e6;border-radius:12px;border:1px solid #f0e0b0;color:#4a4a7a;font-size:14px;line-height:1.8;text-align:center}
 </style>
-<link rel="manifest" href="/manifest.json">
-    <script>if ("serviceWorker" in navigator) { navigator.serviceWorker.register("/sw.js"); }</script>
 </head>
 <body>
 <div class="app">
@@ -200,10 +222,18 @@ body{min-height:100vh;background:linear-gradient(135deg, #eef2ff 0%, #c7b8ff 100
     </div>
     <div id="downloadContainer" style="display:none">
       <button class="btn btn-download" id="downloadBtn">📥 تحميل الملف المترجم</button>
-      <div style="margin-top:15px;padding:15px;background:#fff7e6;border-radius:12px;border:1px solid #f0e0b0;color:#4a4a7a;font-size:14px;line-height:1.8;text-align:center">
-<strong>🤲 دعاء لأيمن:</strong><br>
-اللهم احفظ أيمن بعينك التي لا تنام، وارزقه الصحة والعافية وسعة الرزق، ووفقه لما تحب وترضى، واجعل ختام أمره خيرًا. آمين.
-</div>
+      <div class="dua">
+        <strong>🤲 دعاء لأيمن:</strong><br>
+        اللهم احفظ أيمن بعينك التي لا تنام، وارزقه الصحة والعافية وسعة الرزق، ووفقه لما تحب وترضى، واجعل ختام أمره خيرًا. آمين.
+      </div>
+    </div>
+  </div>
+  <div class="card" style="text-align:right;">
+    <h3 style="color:#5b5bd6;margin-bottom:10px;">🧠 مساعد أيمن الذكي</h3>
+    <p style="font-size:14px;color:#666;margin-bottom:10px;">اسأل عن أي شيء، أو ارفع ملفاً لتحليله.</p>
+    <div style="display:flex;gap:5px;">
+      <input type="text" id="quickChat" maxlength="1000" placeholder="اكتب سؤالك..." style="flex:1;padding:10px;border:1px solid #ddd;border-radius:10px;">
+      <button onclick="goChat()" style="background:#8b5cf6;color:white;border:none;padding:10px 20px;border-radius:10px;cursor:pointer;">إرسال</button>
     </div>
   </div>
 </div>
@@ -246,9 +276,7 @@ function startPolling() {
         clearInterval(pollInterval);
         document.getElementById('statusText').innerText = '✅ اكتملت الترجمة!';
         document.getElementById('downloadContainer').style.display = 'block';
-        document.getElementById('downloadBtn').onclick = () => {
-          window.location.href = '/download/' + jobId;
-        };
+        document.getElementById('downloadBtn').onclick = () => { window.location.href = '/download/' + jobId; };
         document.getElementById('submitBtn').disabled = false;
       } else if (status && status.includes('error')) {
         clearInterval(pollInterval);
@@ -260,62 +288,19 @@ function startPolling() {
     } catch (err) {}
   }, 1000);
 }
+function goChat() {
+    const q = document.getElementById('quickChat').value.trim();
+    if(q) window.location.href = '/chat_page?q=' + encodeURIComponent(q);
+    else window.location.href = '/chat_page';
+}
 </script>
 </body>
 </html>
 """
 
-@app.route('/')
-def home(): return render_template_string(HTML_PAGE)
-
-@app.route('/upload', methods=['POST'])
-def upload():
-    if 'file' not in request.files: return jsonify({"error": "no file"}), 400
-    file = request.files['file']
-    if file.filename == '': return jsonify({"error": "empty name"}), 400
-    filename_lower = file.filename.lower()
-    if not (filename_lower.endswith('.pptx') or filename_lower.endswith('.pdf')):
-        return jsonify({"error": "الملف يجب أن يكون PPTX أو PDF"}), 400
-    job_id = str(uuid.uuid4())[:8]
-    JOBS[job_id] = {'progress': 0, 'status': 'working', 'file': None, 'type': 'pptx' if filename_lower.endswith('.pptx') else 'pdf'}
-    data = file.read()
-    if filename_lower.endswith('.pptx'):
-        threading.Thread(target=process_pptx, args=(job_id, data), daemon=True).start()
-    else:
-        threading.Thread(target=process_pdf, args=(job_id, data), daemon=True).start()
-    return jsonify({"job_id": job_id})
-
-@app.route('/progress/<job_id>')
-def progress(job_id):
-    job = JOBS.get(job_id)
-    if not job: return jsonify({"progress": 0, "status": "not found"})
-    return jsonify({"progress": job['progress'], "status": job['status']})
-
-@app.route('/download/<job_id>')
-def download(job_id):
-    increment_stat("downloads")
-    job = JOBS.get(job_id)
-    if not job or job['status'] != 'done' or not job['file']:
-        return "الملف غير جاهز", 404
-    ext = 'pptx' if job['type'] == 'pptx' else 'pdf'
-    mimetype = 'application/vnd.openxmlformats-officedocument.presentationml.presentation' if ext == 'pptx' else 'application/pdf'
-    return send_file(job['file'], as_attachment=True, download_name=f"translated.{ext}", mimetype=mimetype)
-
-
-@app.route('/manifest.json')
-def manifest():
-    return send_file('static/manifest.json', mimetype='application/json')
-
-@app.route('/sw.js')
-def sw():
-    return send_file('sw.js', mimetype='application/javascript')
-
-
-
-
-
-
+# ===== صفحة المساعد =====
 CHAT_PAGE = """
+<!DOCTYPE html>
 <html dir="rtl">
 <head>
 <meta charset="UTF-8">
@@ -325,7 +310,7 @@ CHAT_PAGE = """
     body { font-family: sans-serif; background: #f0f2f5; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; }
     .header { background: #5b5bd6; color: white; padding: 15px; text-align: center; font-weight: bold; font-size: 18px; }
     .chat-container { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
-    .msg { max-width: 80%; padding: 12px 15px; border-radius: 15px; line-height: 1.6; font-size: 15px; }
+    .msg { max-width: 80%; padding: 12px 15px; border-radius: 15px; line-height: 1.6; font-size: 15px; word-wrap: break-word; }
     .msg.user { background: #5b5bd6; color: white; align-self: flex-start; border-bottom-left-radius: 0; }
     .msg.ai { background: white; color: #333; align-self: flex-end; border-bottom-right-radius: 0; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
     .input-area { background: white; padding: 10px; display: flex; gap: 10px; border-top: 1px solid #ddd; }
@@ -337,7 +322,7 @@ CHAT_PAGE = """
 <div class="header">🧠 مساعد أيمن الذكي</div>
 <div class="chat-container" id="chatContainer"></div>
 <div class="input-area">
-    <input type="text" id="msgInput" placeholder="اكتب رسالتك هنا..." onkeypress="if(event.key==='Enter') sendMsg()">
+    <input type="text" id="msgInput" maxlength="1000" placeholder="اكتب رسالتك هنا..." onkeypress="if(event.key==='Enter') sendMsg()">
     <button onclick="sendMsg()">إرسال</button>
 </div>
 <script>
@@ -346,7 +331,12 @@ function addMsg(sender, text) {
     const c = document.getElementById('chatContainer');
     const d = document.createElement('div');
     d.className = 'msg ' + sender;
-    d.innerHTML = text.replace(/\n/g, '<br>');
+    // تأمين ضد XSS: استخدام textContent بدلاً من innerHTML للردود
+    if(sender === 'ai') {
+        d.textContent = text;
+    } else {
+        d.textContent = text;
+    }
     c.appendChild(d);
     c.scrollTop = c.scrollHeight;
     return d;
@@ -354,6 +344,8 @@ function addMsg(sender, text) {
 async function sendMsg() {
     const input = document.getElementById('msgInput');
     const text = input.value.trim();
+    if(!text) return;
+    if(text.length > 1000) { alert('الرسالة طويلة جداً (الحد 1000 حرف)'); return; }
     addMsg('user', text);
     input.value = '';
     const loadingDiv = addMsg('ai', 'جاري التفكير...');
@@ -366,14 +358,14 @@ async function sendMsg() {
         });
         const data = await res.json();
         if(data.reply) {
-            loadingDiv.innerHTML = data.reply.replace(/\n/g, '<br>');
+            loadingDiv.textContent = data.reply;
             history.push({role: 'user', parts: text});
             history.push({role: 'model', parts: data.reply});
         } else {
-            loadingDiv.innerHTML = '❌ ' + (data.error || 'خطأ');
+            loadingDiv.textContent = '❌ ' + (data.error || 'خطأ');
         }
     } catch(e) {
-        loadingDiv.innerHTML = '❌ فشل الاتصال.';
+        loadingDiv.textContent = '❌ فشل الاتصال.';
     }
 }
 window.onload = () => {
@@ -385,20 +377,115 @@ window.onload = () => {
 </html>
 """
 
+# ===== المسارات =====
+@app.route('/')
+def home():
+    increment_stat('visitors')
+    return render_template_string(HTML_PAGE)
+
+@app.route('/upload', methods=['POST'])
+@rate_limit
+def upload():
+    if 'file' not in request.files: return jsonify({"error": "no file"}), 400
+    file = request.files['file']
+    if file.filename == '': return jsonify({"error": "empty name"}), 400
+    
+    filename_lower = file.filename.lower().strip()
+    if not ('.pptx' in filename_lower or '.pdf' in filename_lower):
+        return jsonify({"error": "الملف يجب أن يكون PPTX أو PDF"}), 400
+    
+    increment_stat('translated_files')
+    job_id = str(uuid.uuid4())[:8]
+    is_pptx = '.pptx' in filename_lower
+    JOBS[job_id] = {'progress': 0, 'status': 'working', 'file': None, 'type': 'pptx' if is_pptx else 'pdf', 'original_filename': file.filename}
+    
+    data = file.read()
+    if is_pptx:
+        threading.Thread(target=process_pptx, args=(job_id, data), daemon=True).start()
+    else:
+        threading.Thread(target=process_pdf, args=(job_id, data), daemon=True).start()
+    
+    return jsonify({"job_id": job_id})
+
+@app.route('/progress/<job_id>')
+def progress(job_id):
+    job = JOBS.get(job_id)
+    if not job: return jsonify({"progress": 0, "status": "not found"})
+    return jsonify({"progress": job['progress'], "status": job['status']})
+
+@app.route('/download/<job_id>')
+def download(job_id):
+    job = JOBS.get(job_id)
+    if not job or job['status'] != 'done' or not job['file']:
+        return "الملف غير جاهز", 404
+    increment_stat('downloads')
+    ext = 'pptx' if job['type'] == 'pptx' else 'pdf'
+    mimetype = 'application/vnd.openxmlformats-officedocument.presentationml.presentation' if ext == 'pptx' else 'application/pdf'
+    original_name = job.get('original_filename', f"translated.{ext}")
+    base_name = original_name.rsplit('.', 1)[0]
+    download_name = f"{base_name}_ar.{ext}"
+    return send_file(job['file'], as_attachment=True, download_name=download_name, mimetype=mimetype)
+
 @app.route('/chat_page')
-def chat_page():
-    return CHAT_PAGE
+def chat_page_route():
+    return render_template_string(CHAT_PAGE)
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8080))
-    app.run(host='0.0.0.0', port=port)
+@app.route('/chat', methods=['POST'])
+@rate_limit
+def chat():
+    data = request.json
+    message = data.get('message', '')
+    history = data.get('history', [])
+    if not message: return jsonify({'error': 'رسالة فارغة'})
+    if len(message) > MAX_CHAT_LEN: return jsonify({'error': 'الرسالة طويلة جداً'})
+    if not GEMINI_KEY: return jsonify({'error': 'مفتاح Gemini غير مهيأ'})
+    
+    try:
+        chat_session = gemini_model.start_chat(history=history)
+        prompt = "أنت مساعد ذكي مفيد جداً اسمه أيمن. أجب باللغة العربية بوضوح وإيجاز. " + message
+        resp = chat_session.send_message(prompt, request_options={'timeout': 30})
+        return jsonify({'reply': resp.text})
+    except Exception as e:
+        return jsonify({'error': 'حدث خطأ ما. حاول لاحقاً.'})
 
+@app.route('/chat_file', methods=['POST'])
+def chat_file():
+    if 'file' not in request.files: return jsonify({'error': 'لا يوجد ملف'})
+    file = request.files['file']
+    if not GEMINI_KEY: return jsonify({'error': 'مفتاح Gemini غير مهيأ'})
+    
+    try:
+        text = ''
+        filename_lower = file.filename.lower()
+        if '.pdf' in filename_lower:
+            doc = fitz.open(stream=file.read(), filetype='pdf')
+            for page in doc:
+                text += page.get_text()
+        elif '.pptx' in filename_lower:
+            prs = Presentation(io.BytesIO(file.read()))
+            for slide in prs.slides:
+                for shape in slide.shapes:
+                    if shape.has_text_frame:
+                        text += shape.text + '\n'
+        else:
+            return jsonify({'error': 'نوع الملف غير مدعوم'})
+            
+        if not text.strip():
+            return jsonify({'error': 'لم يتم العثور على نص'})
+            
+        prompt = f"أنت مساعد ذكي. قم بتلخيص النص التالي، أو إعداد اختبار منه إذا طلب منك. النص:\n{text[:5000]}"
+        resp = gemini_model.generate_content(prompt, request_options={'timeout': 30})
+        return jsonify({'reply': resp.text})
+    except Exception as e:
+        return jsonify({'error': 'حدث خطأ ما في تحليل الملف.'})
 
 @app.route('/admin-dashboard-secret')
 def admin_dashboard():
-    visitors = 0
-    translated = 0
-    downloads = 0
+    auth = request.authorization
+    if not auth or not check_auth(auth.username, auth.password):
+        return authenticate()
+    
+    visitors = 0; translated = 0; downloads = 0
     if supabase:
         try:
             res = supabase.table('stats').select('*').eq('id', 1).execute()
@@ -408,7 +495,6 @@ def admin_dashboard():
                 downloads = res.data[0].get('downloads', 0)
         except Exception as e:
             print('Dashboard error:', e)
-            
     html = f"""
     <html dir='rtl'><head><title>لوحة التحكم</title>
     <style>
@@ -421,89 +507,9 @@ def admin_dashboard():
     <div class='card'><h3>👁️ الزوار</h3><div class='num'>{visitors}</div></div>
     <div class='card'><h3>📄 الملفات المترجمة</h3><div class='num'>{translated}</div></div>
     <div class='card'><h3>📥 التحميلات</h3><div class='num'>{downloads}</div></div>
-    <p style='margin-top: 40px; color: #88ff88;'>✅ هذه الأرقام محفوظة بشكل دائم في قاعدة البيانات.</p>
     </body></html>
     """
     return html
-
-
-
-
-
-
-CHAT_PAGE = """
-<html dir="rtl">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>مساعد أيمن الذكي</title>
-<style>
-    body { font-family: sans-serif; background: #f0f2f5; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; }
-    .header { background: #5b5bd6; color: white; padding: 15px; text-align: center; font-weight: bold; font-size: 18px; }
-    .chat-container { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
-    .msg { max-width: 80%; padding: 12px 15px; border-radius: 15px; line-height: 1.6; font-size: 15px; }
-    .msg.user { background: #5b5bd6; color: white; align-self: flex-start; border-bottom-left-radius: 0; }
-    .msg.ai { background: white; color: #333; align-self: flex-end; border-bottom-right-radius: 0; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-    .input-area { background: white; padding: 10px; display: flex; gap: 10px; border-top: 1px solid #ddd; }
-    .input-area input { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 20px; outline: none; font-size: 15px; }
-    .input-area button { background: #5b5bd6; color: white; border: none; padding: 12px 20px; border-radius: 20px; cursor: pointer; font-weight: bold; }
-</style>
-</head>
-<body>
-<div class="header">🧠 مساعد أيمن الذكي</div>
-<div class="chat-container" id="chatContainer"></div>
-<div class="input-area">
-    <input type="text" id="msgInput" placeholder="اكتب رسالتك هنا..." onkeypress="if(event.key==='Enter') sendMsg()">
-    <button onclick="sendMsg()">إرسال</button>
-</div>
-<script>
-let history = [];
-function addMsg(sender, text) {
-    const c = document.getElementById('chatContainer');
-    const d = document.createElement('div');
-    d.className = 'msg ' + sender;
-    d.innerHTML = text.replace(/\n/g, '<br>');
-    c.appendChild(d);
-    c.scrollTop = c.scrollHeight;
-    return d;
-}
-async function sendMsg() {
-    const input = document.getElementById('msgInput');
-    const text = input.value.trim();
-    addMsg('user', text);
-    input.value = '';
-    const loadingDiv = addMsg('ai', 'جاري التفكير...');
-    
-    try {
-        const res = await fetch('/chat', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({message: text, history: history})
-        });
-        const data = await res.json();
-        if(data.reply) {
-            loadingDiv.innerHTML = data.reply.replace(/\n/g, '<br>');
-            history.push({role: 'user', parts: text});
-            history.push({role: 'model', parts: data.reply});
-        } else {
-            loadingDiv.innerHTML = '❌ ' + (data.error || 'خطأ');
-        }
-    } catch(e) {
-        loadingDiv.innerHTML = '❌ فشل الاتصال.';
-    }
-}
-window.onload = () => {
-    const q = new URLSearchParams(window.location.search).get('q');
-    if(q) { document.getElementById('msgInput').value = q; sendMsg(); }
-};
-</script>
-</body>
-</html>
-"""
-
-@app.route('/chat_page')
-def chat_page():
-    return CHAT_PAGE
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
