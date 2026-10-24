@@ -28,14 +28,17 @@ if GEMINI_KEY:
     gemini_model = genai.GenerativeModel('gemini-1.5-flash')
 
 
-SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://lmgshabrtmvbnpdhkkst.supabase.co')
-SUPABASE_SERVICE_KEY = os.environ.get('SUPABASE_SERVICE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtZ3NoYWJydG12Ym5wZGhra3N0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjYxNzgyMSwiZXhwIjoyMTA4MTkzODIxfQ.H8-yzWt9XlQEpKFfzSJxXey48u222UGcl5NuvCtATcA')
+
+from supabase import create_client
+
+SUPABASE_URL = 'https://lmgshabrtmvbnpdhkkst.supabase.co'
+SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtZ3NoYWJydG12Ym5wZGhra3N0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjYxNzgyMSwiZXhwIjoyMTA4MTkzODIxfQ.H8-yzWt9XlQEpKFfzSJxXey48u222UGcl5NuvCtATcA'
+
 supabase = None
-if SUPABASE_URL and SUPABASE_SERVICE_KEY:
-    try:
-        supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-    except Exception as e:
-        print('Supabase error:', e)
+try:
+    supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+except Exception as e:
+    print('Supabase error:', e)
 
 def increment_stat(field):
     if not supabase: return
@@ -48,6 +51,7 @@ def increment_stat(field):
         print('Stat error:', e)
 
 JOBS = {}
+
 FONT_PATH = "/tmp/Amiri-Regular.ttf"
 
 def ensure_font():
