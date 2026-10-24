@@ -241,7 +241,7 @@ def chat():
         elif msg.get('role') == 'model': formatted_history.append({'role': 'model', 'parts': [msg.get('parts')]})
     
     # قائمة النماذج التي سنجربها بالترتيب
-    models_to_try = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.5-pro', 'gemini-2.5-flash-lite']
+    models_to_try = ['gemini-3.5-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite-preview', 'gemini-3-flash-preview']
     
     last_error = ''
     for model_name in models_to_try:
