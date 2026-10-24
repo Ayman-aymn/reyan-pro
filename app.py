@@ -109,7 +109,7 @@ try:
         f.write(font_bytes)
     pdfmetrics.registerFont(TTFont('Amiri', FONT_PATH))
     ARABIC_FONT = 'Amiri'
-    print("✅ تم تحميل الخط العربي بنجاح من font_b64.txt")
+    print("✅ تم تحميل الخط العربي بنجاح")
 except Exception as e:
     print(f"❌ فشل تحميل الخط: {e}")
     ARABIC_FONT = 'Helvetica'
@@ -118,20 +118,30 @@ def fix_ar(t):
     try: return get_display(arabic_reshaper.reshape(t))
     except: return t
 
-def translate_text(text):
-    if not text.strip(): return text
+# ===== الترجمة الدفعية =====
+def translate_batch(texts):
+    if not texts: return []
     if DEEPL_KEY:
         try:
-            r = requests.post("https://api-free.deepl.com/v2/translate", headers={"Authorization": f"DeepL-Auth-Key {DEEPL_KEY}"}, json={"text": [text], "target_lang": "AR"}, timeout=10)
-            if r.status_code == 200: return r.json()['translations'][0]['text']
+            r = requests.post("https://api-free.deepl.com/v2/translate", 
+                headers={"Authorization": f"DeepL-Auth-Key {DEEPL_KEY}"}, 
+                json={"text": texts, "target_lang": "AR"}, timeout=30)
+            if r.status_code == 200: 
+                return [t['text'] for t in r.json()['translations']]
         except: pass
-    for model_name in MODELS_TO_TRY:
-        try:
-            model = genai.GenerativeModel(model_name)
-            resp = model.generate_content(f"ترجم للعربية فقط:\n{text}", request_options={"timeout": 10})
-            if resp.text: return resp.text.strip()
-        except: continue
-    return text
+    
+    # إذا فشل DeepL، نستخدم Gemini لكل نص
+    results = []
+    for text in texts:
+        translated = text
+        for model_name in MODELS_TO_TRY:
+            try:
+                model = genai.GenerativeModel(model_name)
+                resp = model.generate_content(f"ترجم للعربية فقط:\n{text}", request_options={"timeout": 15})
+                if resp.text: translated = resp.text.strip(); break
+            except: continue
+        results.append(translated)
+    return results
 
 def translate_image_with_gemini(image_bytes):
     try:
@@ -149,6 +159,7 @@ def translate_image_with_gemini(image_bytes):
     except: pass
     return None
 
+# ===== معالجة PPTX (تحويل إلى PDF) =====
 def process_pptx_to_pdf(job_id, data, translate_images=False):
     try:
         prs = Presentation(io.BytesIO(data))
@@ -165,29 +176,41 @@ def process_pptx_to_pdf(job_id, data, translate_images=False):
             story.append(Paragraph(f"--- شريحة {i+1} ---", s_en))
             story.append(Spacer(1, 10))
             
+            # جمع نصوص الشريحة للترجمة الدفعية
+            texts_to_translate = []
+            shapes_with_text = []
             for shape in slide.shapes:
                 if shape.has_text_frame and shape.text.strip():
                     orig = shape.text.strip()
                     if len(orig) > 1:
-                        tr = translate_text(orig)
-                        story.append(Paragraph(orig, s_en))
-                        story.append(Spacer(1, 4))
-                        story.append(Paragraph(fix_ar(tr), s_ar))
-                        story.append(Spacer(1, 10))
-                
-                if translate_images and shape.shape_type == 13:
-                    try:
-                        image_bytes = shape.image.blob
-                        img_io = io.BytesIO(image_bytes)
-                        img = Image(img_io, width=400, height=300)
-                        story.append(img)
-                        story.append(Spacer(1, 5))
-                        translated_text = translate_image_with_gemini(image_bytes)
-                        if translated_text:
-                            story.append(Paragraph(f"[ترجمة الصورة]: {fix_ar(translated_text)}", s_ar))
-                        story.append(Spacer(1, 10))
-                    except Exception as e:
-                        print(f"Error processing image: {e}")
+                        texts_to_translate.append(orig)
+                        shapes_with_text.append(shape)
+            
+            if texts_to_translate:
+                translated_texts = translate_batch(texts_to_translate)
+                for shape, tr in zip(shapes_with_text, translated_texts):
+                    orig = shape.text.strip()
+                    story.append(Paragraph(orig, s_en))
+                    story.append(Spacer(1, 4))
+                    story.append(Paragraph(fix_ar(tr), s_ar))
+                    story.append(Spacer(1, 10))
+            
+            # معالجة الصور
+            if translate_images:
+                for shape in slide.shapes:
+                    if shape.shape_type == 13:
+                        try:
+                            image_bytes = shape.image.blob
+                            img_io = io.BytesIO(image_bytes)
+                            img = Image(img_io, width=400, height=300)
+                            story.append(img)
+                            story.append(Spacer(1, 5))
+                            translated_text = translate_image_with_gemini(image_bytes)
+                            if translated_text:
+                                story.append(Paragraph(f"[ترجمة الصورة]: {fix_ar(translated_text)}", s_ar))
+                            story.append(Spacer(1, 10))
+                        except Exception as e:
+                            print(f"Error processing image: {e}")
             
             JOBS[job_id]['progress'] = int(((i+1)/total)*100)
         
@@ -213,9 +236,10 @@ def process_pdf(job_id, data, translate_images=False):
         for i, page in enumerate(doc):
             txt = page.get_text("text").strip()
             if txt:
-                for line in txt.split('\n'):
-                    if line.strip():
-                        tr = translate_text(line)
+                lines = [l for l in txt.split('\n') if l.strip()]
+                if lines:
+                    translated_lines = translate_batch(lines)
+                    for line, tr in zip(lines, translated_lines):
                         story.append(Paragraph(line, s_en))
                         story.append(Paragraph(fix_ar(tr), s_ar))
                         story.append(Spacer(1, 8))
@@ -368,7 +392,7 @@ function goChat() {
 </html>
 """
 
-# ===== صفحة المساعد (تم دمج رفع الملف مع السؤال) =====
+# ===== صفحة المساعد =====
 CHAT_PAGE = """
 <!DOCTYPE html>
 <html dir="rtl">
@@ -465,7 +489,6 @@ async function uploadFileAndAsk() {
         const data = await res.json();
         if(data.reply) {
             loadingDiv.textContent = data.reply;
-            // إضافة السؤال والرد إلى التاريخ
             history.push({role: 'user', parts: 'ملف: ' + file.name + ' | سؤال: ' + question});
             history.push({role: 'model', parts: data.reply});
         } else {
