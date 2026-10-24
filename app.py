@@ -301,6 +301,87 @@ def manifest():
 def sw():
     return send_file('sw.js', mimetype='application/javascript')
 
+
+CHAT_PAGE = """
+<html dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>مساعد أيمن الذكي</title>
+<style>
+    body { font-family: sans-serif; background: #f0f2f5; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; }
+    .header { background: #5b5bd6; color: white; padding: 15px; text-align: center; font-weight: bold; font-size: 18px; }
+    .chat-container { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+    .msg { max-width: 80%; padding: 12px 15px; border-radius: 15px; line-height: 1.6; font-size: 15px; }
+    .msg.user { background: #5b5bd6; color: white; align-self: flex-start; border-bottom-left-radius: 0; }
+    .msg.ai { background: white; color: #333; align-self: flex-end; border-bottom-right-radius: 0; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    .input-area { background: white; padding: 10px; display: flex; gap: 10px; border-top: 1px solid #ddd; }
+    .input-area input { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 20px; outline: none; font-size: 15px; }
+    .input-area button { background: #5b5bd6; color: white; border: none; padding: 12px 20px; border-radius: 20px; cursor: pointer; font-weight: bold; }
+    .loading { color: #888; font-style: italic; }
+</style>
+</head>
+<body>
+<div class="header">🧠 مساعد أيمن الذكي</div>
+<div class="chat-container" id="chatContainer"></div>
+<div class="input-area">
+    <input type="text" id="msgInput" placeholder="اكتب رسالتك هنا..." onkeypress="if(event.key==='Enter') sendMsg()">
+    <button onclick="sendMsg()">إرسال</button>
+</div>
+<script>
+let history = [];
+function addMsg(sender, text) {
+    const c = document.getElementById('chatContainer');
+    const d = document.createElement('div');
+    d.className = 'msg ' + sender;
+    d.innerHTML = text.replace(/\n/g, '<br>');
+    c.appendChild(d);
+    c.scrollTop = c.scrollHeight;
+    return d;
+}
+async function sendMsg() {
+    const input = document.getElementById('msgInput');
+    const text = input.value.trim();
+    addMsg('user', text);
+    input.value = '';
+    const loadingDiv = addMsg('ai', '<span class="loading">جاري التفكير...</span>');
+    
+    try {
+        const res = await fetch('/chat', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({message: text, history: history})
+        });
+        const data = await res.json();
+        if(data.reply) {
+            loadingDiv.innerHTML = data.reply.replace(/\n/g, '<br>');
+            history.push({role: 'user', parts: text});
+            history.push({role: 'model', parts: data.reply});
+        } else {
+            loadingDiv.innerHTML = '❌ ' + (data.error || 'خطأ');
+        }
+    } catch(e) {
+        loadingDiv.innerHTML = '❌ فشل الاتصال.';
+    }
+}
+// بدء المحادثة إذا كان هناك سؤال في الرابط
+window.onload = () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const q = urlParams.get('q');
+    if(q) {
+        document.getElementById('msgInput').value = q;
+        sendMsg();
+    }
+};
+</script>
+</body>
+</html>
+"""
+
+@app.route('/chat_page')
+def chat_page():
+    return CHAT_PAGE
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
@@ -337,6 +418,87 @@ def admin_dashboard():
     </body></html>
     """
     return html
+
+
+CHAT_PAGE = """
+<html dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>مساعد أيمن الذكي</title>
+<style>
+    body { font-family: sans-serif; background: #f0f2f5; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; }
+    .header { background: #5b5bd6; color: white; padding: 15px; text-align: center; font-weight: bold; font-size: 18px; }
+    .chat-container { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+    .msg { max-width: 80%; padding: 12px 15px; border-radius: 15px; line-height: 1.6; font-size: 15px; }
+    .msg.user { background: #5b5bd6; color: white; align-self: flex-start; border-bottom-left-radius: 0; }
+    .msg.ai { background: white; color: #333; align-self: flex-end; border-bottom-right-radius: 0; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    .input-area { background: white; padding: 10px; display: flex; gap: 10px; border-top: 1px solid #ddd; }
+    .input-area input { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 20px; outline: none; font-size: 15px; }
+    .input-area button { background: #5b5bd6; color: white; border: none; padding: 12px 20px; border-radius: 20px; cursor: pointer; font-weight: bold; }
+    .loading { color: #888; font-style: italic; }
+</style>
+</head>
+<body>
+<div class="header">🧠 مساعد أيمن الذكي</div>
+<div class="chat-container" id="chatContainer"></div>
+<div class="input-area">
+    <input type="text" id="msgInput" placeholder="اكتب رسالتك هنا..." onkeypress="if(event.key==='Enter') sendMsg()">
+    <button onclick="sendMsg()">إرسال</button>
+</div>
+<script>
+let history = [];
+function addMsg(sender, text) {
+    const c = document.getElementById('chatContainer');
+    const d = document.createElement('div');
+    d.className = 'msg ' + sender;
+    d.innerHTML = text.replace(/\n/g, '<br>');
+    c.appendChild(d);
+    c.scrollTop = c.scrollHeight;
+    return d;
+}
+async function sendMsg() {
+    const input = document.getElementById('msgInput');
+    const text = input.value.trim();
+    addMsg('user', text);
+    input.value = '';
+    const loadingDiv = addMsg('ai', '<span class="loading">جاري التفكير...</span>');
+    
+    try {
+        const res = await fetch('/chat', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({message: text, history: history})
+        });
+        const data = await res.json();
+        if(data.reply) {
+            loadingDiv.innerHTML = data.reply.replace(/\n/g, '<br>');
+            history.push({role: 'user', parts: text});
+            history.push({role: 'model', parts: data.reply});
+        } else {
+            loadingDiv.innerHTML = '❌ ' + (data.error || 'خطأ');
+        }
+    } catch(e) {
+        loadingDiv.innerHTML = '❌ فشل الاتصال.';
+    }
+}
+// بدء المحادثة إذا كان هناك سؤال في الرابط
+window.onload = () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const q = urlParams.get('q');
+    if(q) {
+        document.getElementById('msgInput').value = q;
+        sendMsg();
+    }
+};
+</script>
+</body>
+</html>
+"""
+
+@app.route('/chat_page')
+def chat_page():
+    return CHAT_PAGE
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
