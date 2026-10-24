@@ -9,12 +9,12 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/static/icon-192.png",
+      "src": "https://placehold.co/192x192/5b5bd6/ffffff/png?text=الريان",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/static/icon-512.png",
+      "src": "https://placehold.co/512x512/5b5bd6/ffffff/png?text=الريان",
       "sizes": "512x512",
       "type": "image/png"
     }
