@@ -144,6 +144,8 @@ body{min-height:100vh;background:linear-gradient(135deg, #eef2ff 0%, #c7b8ff 100
 .progress-circle{width:120px;height:120px;border-radius:50%;background:conic-gradient(#7c8aff 0deg, #ddd 0deg);display:flex;justify-content:center;align-items:center;transition:background 0.3s}
 .progress-inner{width:100px;height:100px;border-radius:50%;background:#fff;display:flex;justify-content:center;align-items:center;font-size:24px;font-weight:900;color:#5b5bd6}
 </style>
+<link rel="manifest" href="/manifest.json">
+    <script>if ("serviceWorker" in navigator) { navigator.serviceWorker.register("/sw.js"); }</script>
 </head>
 <body>
 <div class="app">
@@ -264,6 +266,16 @@ def download(job_id):
     mimetype = 'application/vnd.openxmlformats-officedocument.presentationml.presentation' if ext == 'pptx' else 'application/pdf'
     return send_file(job['file'], as_attachment=True, download_name=f"translated.{ext}", mimetype=mimetype)
 
+
+@app.route('/manifest.json')
+def manifest():
+    return send_file('static/manifest.json', mimetype='application/json')
+
+@app.route('/sw.js')
+def sw():
+    return send_file('sw.js', mimetype='application/javascript')
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
+
