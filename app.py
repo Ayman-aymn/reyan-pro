@@ -99,7 +99,7 @@ def rate_limit(f):
 
 JOBS = {}
 
-# ===== حل مشكلة الخط: فك تشفير من font_b64.txt =====
+# ===== الخط العربي =====
 try:
     with open('font_b64.txt', 'r') as f:
         font_b64 = f.read().strip()
@@ -109,16 +109,14 @@ try:
         f.write(font_bytes)
     pdfmetrics.registerFont(TTFont('Amiri', FONT_PATH))
     ARABIC_FONT = 'Amiri'
-    print("✅ تم تحميل الخط العربي بنجاح")
 except Exception as e:
-    print(f"❌ فشل تحميل الخط: {e}")
+    print(f"Font error: {e}")
     ARABIC_FONT = 'Helvetica'
 
 def fix_ar(t):
     try: return get_display(arabic_reshaper.reshape(t))
     except: return t
 
-# ===== الترجمة الدفعية =====
 def translate_batch(texts):
     if not texts: return []
     if DEEPL_KEY:
@@ -129,8 +127,6 @@ def translate_batch(texts):
             if r.status_code == 200: 
                 return [t['text'] for t in r.json()['translations']]
         except: pass
-    
-    # إذا فشل DeepL، نستخدم Gemini لكل نص
     results = []
     for text in texts:
         translated = text
@@ -159,68 +155,91 @@ def translate_image_with_gemini(image_bytes):
     except: pass
     return None
 
-# ===== معالجة PPTX (تحويل إلى PDF) =====
-def process_pptx_to_pdf(job_id, data, translate_images=False):
+# ===== PPTX: الترجمة عبر DeepL Document API + الصور =====
+def process_pptx(job_id, data, translate_images=False):
     try:
-        prs = Presentation(io.BytesIO(data))
+        # استخدام DeepL Document API لترجمة النصوص
+        if DEEPL_KEY:
+            try:
+                files = {'file': ('document.pptx', data, 'application/vnd.openxmlformats-officedocument.presentationml.presentation')}
+                r = requests.post(
+                    "https://api-free.deepl.com/v2/document",
+                    headers={"Authorization": f"DeepL-Auth-Key {DEEPL_KEY}"},
+                    files=files,
+                    data={"target_lang": "AR"},
+                    timeout=60
+                )
+                if r.status_code == 200:
+                    document_id = r.json()['document_id']
+                    # انتظار الترجمة
+                    for _ in range(30):
+                        time.sleep(2)
+                        status = requests.post(
+                            f"https://api-free.deepl.com/v2/document/{document_id}",
+                            headers={"Authorization": f"DeepL-Auth-Key {DEEPL_KEY}"}
+                        )
+                        if status.status_code == 200 and status.json().get('status') == 'done':
+                            result = requests.post(
+                                f"https://api-free.deepl.com/v2/document/{document_id}/result",
+                                headers={"Authorization": f"DeepL-Auth-Key {DEEPL_KEY}"}
+                            )
+                            if result.status_code == 200:
+                                translated_data = result.content
+                                break
+                        elif status.status_code == 200 and status.json().get('status') == 'error':
+                            break
+            except Exception as e:
+                print(f"DeepL Document error: {e}")
+                translated_data = data # fallback
+        else:
+            translated_data = data
+
+        # فتح الملف المترجم (أو الأصلي) لمعالجة الصور
+        prs = Presentation(io.BytesIO(translated_data))
         total = len(prs.slides)
-        if total > MAX_PAGES: JOBS[job_id]['status'] = 'error: الحد الأقصى 100 شريحة'; return
         
-        out_bio = io.BytesIO()
-        templ = SimpleDocTemplate(out_bio, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
-        s_en = ParagraphStyle('en', fontName='Helvetica', fontSize=11, leading=14)
-        s_ar = ParagraphStyle('ar', fontName=ARABIC_FONT, fontSize=12, leading=16, alignment=2)
-        story = []
-        
-        for i, slide in enumerate(prs.slides):
-            story.append(Paragraph(f"--- شريحة {i+1} ---", s_en))
-            story.append(Spacer(1, 10))
-            
-            # جمع نصوص الشريحة للترجمة الدفعية
-            texts_to_translate = []
-            shapes_with_text = []
-            for shape in slide.shapes:
-                if shape.has_text_frame and shape.text.strip():
-                    orig = shape.text.strip()
-                    if len(orig) > 1:
-                        texts_to_translate.append(orig)
-                        shapes_with_text.append(shape)
-            
-            if texts_to_translate:
-                translated_texts = translate_batch(texts_to_translate)
-                for shape, tr in zip(shapes_with_text, translated_texts):
-                    orig = shape.text.strip()
-                    story.append(Paragraph(orig, s_en))
-                    story.append(Spacer(1, 4))
-                    story.append(Paragraph(fix_ar(tr), s_ar))
-                    story.append(Spacer(1, 10))
-            
-            # معالجة الصور
-            if translate_images:
+        if translate_images:
+            for i, slide in enumerate(prs.slides):
+                image_translations = []
                 for shape in slide.shapes:
-                    if shape.shape_type == 13:
+                    if shape.shape_type == 13: # صورة
                         try:
                             image_bytes = shape.image.blob
-                            img_io = io.BytesIO(image_bytes)
-                            img = Image(img_io, width=400, height=300)
-                            story.append(img)
-                            story.append(Spacer(1, 5))
                             translated_text = translate_image_with_gemini(image_bytes)
                             if translated_text:
-                                story.append(Paragraph(f"[ترجمة الصورة]: {fix_ar(translated_text)}", s_ar))
-                            story.append(Spacer(1, 10))
-                        except Exception as e:
-                            print(f"Error processing image: {e}")
-            
-            JOBS[job_id]['progress'] = int(((i+1)/total)*100)
+                                image_translations.append(translated_text)
+                        except: pass
+                
+                if image_translations:
+                    # إضافة مربع نص كبير أسفل الشريحة
+                    left = Pt(20); top = Pt(400); width = Pt(600); height = Pt(150)
+                    txBox = slide.shapes.add_textbox(left, top, width, height)
+                    tf = txBox.text_frame
+                    tf.word_wrap = True
+                    tf.text = "ترجمة الصور:"
+                    tf.paragraphs[0].font.size = Pt(20)
+                    tf.paragraphs[0].font.name = 'Arial'
+                    tf.paragraphs[0].alignment = PP_ALIGN.RIGHT
+                    for tr in image_translations:
+                        p = tf.add_paragraph()
+                        p.text = tr
+                        p.font.size = Pt(18)
+                        p.font.name = 'Arial'
+                        p.alignment = PP_ALIGN.RIGHT
+                
+                JOBS[job_id]['progress'] = int(((i+1)/total)*100)
         
-        templ.build(story)
-        out_bio.seek(0)
-        JOBS[job_id]['file'] = out_bio; JOBS[job_id]['status'] = 'done'; JOBS[job_id]['progress'] = 100
-        JOBS[job_id]['type'] = 'pdf'
+        out = io.BytesIO()
+        prs.save(out)
+        out.seek(0)
+        JOBS[job_id]['file'] = out
+        JOBS[job_id]['status'] = 'done'
+        JOBS[job_id]['progress'] = 100
+        JOBS[job_id]['type'] = 'pptx'
     except Exception as e:
         JOBS[job_id]['status'] = f'error: {str(e)[:100]}'
 
+# ===== PDF: إنشاء ملف جديد =====
 def process_pdf(job_id, data, translate_images=False):
     try:
         doc = fitz.open(stream=data, filetype="pdf")
@@ -527,7 +546,7 @@ def upload():
     is_pptx = '.pptx' in filename_lower
     JOBS[job_id] = {'progress': 0, 'status': 'working', 'file': None, 'type': 'pptx' if is_pptx else 'pdf', 'original_filename': file.filename}
     data = file.read()
-    if is_pptx: threading.Thread(target=process_pptx_to_pdf, args=(job_id, data, translate_images), daemon=True).start()
+    if is_pptx: threading.Thread(target=process_pptx, args=(job_id, data, translate_images), daemon=True).start()
     else: threading.Thread(target=process_pdf, args=(job_id, data, translate_images), daemon=True).start()
     return jsonify({"job_id": job_id})
 
@@ -542,10 +561,12 @@ def download(job_id):
     job = JOBS.get(job_id)
     if not job or job['status'] != 'done' or not job['file']: return "الملف غير جاهز", 404
     increment_stat('downloads')
-    original_name = job.get('original_filename', "translated.pdf")
+    ext = 'pptx' if job['type'] == 'pptx' else 'pdf'
+    mimetype = 'application/vnd.openxmlformats-officedocument.presentationml.presentation' if ext == 'pptx' else 'application/pdf'
+    original_name = job.get('original_filename', f"translated.{ext}")
     base_name = original_name.rsplit('.', 1)[0]
-    download_name = f"{base_name}_ar.pdf"
-    return send_file(job['file'], as_attachment=True, download_name=download_name, mimetype='application/pdf')
+    download_name = f"{base_name}_ar.{ext}"
+    return send_file(job['file'], as_attachment=True, download_name=download_name, mimetype=mimetype)
 
 @app.route('/chat_page')
 def chat_page_route():
