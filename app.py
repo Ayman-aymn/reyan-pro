@@ -1,4 +1,4 @@
-import os, io, uuid, json, threading, time, re
+import os, io, uuid, json, threading, time, re, base64
 from flask import Flask, request, jsonify, send_file, render_template_string
 from pptx import Presentation
 from pptx.util import Pt
@@ -7,7 +7,7 @@ import fitz
 import requests
 import arabic_reshaper
 from bidi.algorithm import get_display
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfbase import pdfmetrics
@@ -129,57 +129,73 @@ def translate_text(text):
     return text
 
 def translate_image_with_gemini(image_bytes):
-    import base64
-    img_b64 = base64.b64encode(image_bytes).decode('utf-8')
-    for model_name in MODELS_TO_TRY:
-        try:
-            model = genai.GenerativeModel(model_name)
-            prompt = "استخرج النص من هذه الصورة وترجمه إلى العربية. أعد الترجمة فقط."
-            resp = model.generate_content(
-                [{'mime_type': 'image/jpeg', 'data': img_b64}, prompt],
-                request_options={"timeout": 30}
-            )
-            if resp.text: return resp.text.strip()
-        except Exception as e:
-            print(f"Image translation error: {e}")
-            continue
+    try:
+        img_b64 = base64.b64encode(image_bytes).decode('utf-8')
+        for model_name in MODELS_TO_TRY:
+            try:
+                model = genai.GenerativeModel(model_name)
+                prompt = "استخرج النص من هذه الصورة وترجمه إلى العربية. أعد الترجمة فقط."
+                resp = model.generate_content(
+                    [{'mime_type': 'image/jpeg', 'data': img_b64}, prompt],
+                    request_options={"timeout": 30}
+                )
+                if resp.text: return resp.text.strip()
+            except: continue
+    except: pass
     return None
 
-def process_pptx(job_id, data, translate_images=False):
+# ===== معالجة PPTX (تحويل إلى PDF) =====
+def process_pptx_to_pdf(job_id, data, translate_images=False):
     try:
         prs = Presentation(io.BytesIO(data))
         total = len(prs.slides)
         if total > MAX_PAGES: JOBS[job_id]['status'] = 'error: الحد الأقصى 100 شريحة'; return
         
+        out_bio = io.BytesIO()
+        templ = SimpleDocTemplate(out_bio, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
+        s_en = ParagraphStyle('en', fontName='Helvetica', fontSize=11, leading=14)
+        s_ar = ParagraphStyle('ar', fontName=ARABIC_FONT, fontSize=12, leading=16, alignment=2)
+        story = []
+        
         for i, slide in enumerate(prs.slides):
+            story.append(Paragraph(f"--- شريحة {i+1} ---", s_en))
+            story.append(Spacer(1, 10))
+            
             for shape in slide.shapes:
+                # 1. ترجمة النصوص
                 if shape.has_text_frame and shape.text.strip():
                     orig = shape.text.strip()
                     if len(orig) > 1:
                         tr = translate_text(orig)
-                        if tr and tr != orig:
-                            p = shape.text_frame.add_paragraph()
-                            p.text = tr; p.font.size = Pt(28); p.font.name = 'Arial'
-                            p.alignment = PP_ALIGN.RIGHT; p.space_before = Pt(10)
+                        story.append(Paragraph(orig, s_en))
+                        story.append(Spacer(1, 4))
+                        story.append(Paragraph(fix_ar(tr), s_ar))
+                        story.append(Spacer(1, 10))
                 
-                if translate_images and shape.shape_type == 13:
+                # 2. ترجمة الصور (إذا طلب المستخدم)
+                if translate_images and shape.shape_type == 13: # 13 = صورة
                     try:
                         image_bytes = shape.image.blob
+                        # إضافة الصورة إلى PDF
+                        img_io = io.BytesIO(image_bytes)
+                        img = Image(img_io, width=400, height=300) # حجم تقريبي
+                        story.append(img)
+                        story.append(Spacer(1, 5))
+                        
+                        # ترجمة النص داخل الصورة
                         translated_text = translate_image_with_gemini(image_bytes)
                         if translated_text:
-                            if not shape.has_text_frame:
-                                shape.text_frame.text = ""
-                            p = shape.text_frame.add_paragraph()
-                            p.text = translated_text
-                            p.font.size = Pt(14); p.font.name = 'Arial'
-                            p.alignment = PP_ALIGN.RIGHT
+                            story.append(Paragraph(f"[ترجمة الصورة]: {fix_ar(translated_text)}", s_ar))
+                        story.append(Spacer(1, 10))
                     except Exception as e:
                         print(f"Error processing image: {e}")
             
             JOBS[job_id]['progress'] = int(((i+1)/total)*100)
         
-        out = io.BytesIO(); prs.save(out); out.seek(0)
-        JOBS[job_id]['file'] = out; JOBS[job_id]['status'] = 'done'; JOBS[job_id]['progress'] = 100
+        templ.build(story)
+        out_bio.seek(0)
+        JOBS[job_id]['file'] = out_bio; JOBS[job_id]['status'] = 'done'; JOBS[job_id]['progress'] = 100
+        JOBS[job_id]['type'] = 'pdf' # مهم: الملف الناتج هو PDF
     except Exception as e:
         JOBS[job_id]['status'] = f'error: {str(e)[:100]}'
 
@@ -191,20 +207,22 @@ def process_pdf(job_id, data, translate_images=False):
         
         out_bio = io.BytesIO()
         templ = SimpleDocTemplate(out_bio, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
-        s1 = ParagraphStyle('o', fontName='Helvetica', fontSize=11, leading=14)
-        s2 = ParagraphStyle('a', fontName=ARABIC_FONT, fontSize=12, leading=16, alignment=2)
+        s_en = ParagraphStyle('en', fontName='Helvetica', fontSize=11, leading=14)
+        s_ar = ParagraphStyle('ar', fontName=ARABIC_FONT, fontSize=12, leading=16, alignment=2)
         story = []
         
         for i, page in enumerate(doc):
+            # ترجمة النصوص
             txt = page.get_text("text").strip()
             if txt:
                 for line in txt.split('\n'):
                     if line.strip():
                         tr = translate_text(line)
-                        story.append(Paragraph(line, s1))
-                        story.append(Paragraph(fix_ar(tr), s2))
+                        story.append(Paragraph(line, s_en))
+                        story.append(Paragraph(fix_ar(tr), s_ar))
                         story.append(Spacer(1, 8))
             
+            # ترجمة الصور
             if translate_images:
                 for img_index, img in enumerate(page.get_images(full=True)):
                     try:
@@ -213,7 +231,7 @@ def process_pdf(job_id, data, translate_images=False):
                         image_bytes = base_image["image"]
                         translated_text = translate_image_with_gemini(image_bytes)
                         if translated_text:
-                            story.append(Paragraph(f"[ترجمة الصورة {img_index+1}]: {fix_ar(translated_text)}", s2))
+                            story.append(Paragraph(f"[ترجمة الصورة {img_index+1}]: {fix_ar(translated_text)}", s_ar))
                             story.append(Spacer(1, 8))
                     except Exception as e:
                         print(f"Error processing PDF image: {e}")
@@ -223,9 +241,11 @@ def process_pdf(job_id, data, translate_images=False):
         templ.build(story)
         out_bio.seek(0)
         JOBS[job_id]['file'] = out_bio; JOBS[job_id]['status'] = 'done'; JOBS[job_id]['progress'] = 100
+        JOBS[job_id]['type'] = 'pdf'
     except Exception as e:
         JOBS[job_id]['status'] = f'error: {str(e)[:100]}'
 
+# ===== الواجهة الرئيسية =====
 HTML_PAGE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -253,7 +273,7 @@ body{min-height:100vh;background:linear-gradient(135deg, #eef2ff 0%, #c7b8ff 100
 <div class="app">
   <div class="card">
     <h2 style="color:#5b5bd6;margin-bottom:10px">الريان للترجمة</h2>
-    <p style="color:#6b6b9a;margin-bottom:15px">رفع ملف PPTX أو PDF لترجمة النصوص</p>
+    <p style="color:#6b6b9a;margin-bottom:15px">رفع ملف PPTX أو PDF لترجمة النصوص (سينتج ملف PDF)</p>
     <form id="uploadForm" enctype="multipart/form-data">
       <input type="file" name="file" accept=".pptx,.pdf" required style="width:100%;margin-bottom:10px">
       <div class="checkbox">
@@ -351,6 +371,7 @@ function goChat() {
 </html>
 """
 
+# ===== صفحة المساعد =====
 CHAT_PAGE = """
 <!DOCTYPE html>
 <html dir="rtl">
@@ -429,9 +450,12 @@ async function sendMsg() {
 async function uploadFile() {
     const file = document.getElementById('fileInput').files[0];
     if(!file) { alert('اختر ملفاً'); return; }
-    addMsg('user', 'جاري تحليل الملف: ' + file.name);
+    const question = document.getElementById('msgInput').value.trim();
+    addMsg('user', 'جاري تحليل الملف: ' + file.name + (question ? ' (السؤال: ' + question + ')' : ''));
     const loadingDiv = addMsg('ai', 'جاري القراءة...');
-    const fd = new FormData(); fd.append('file', file);
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('question', question);
     try {
         const res = await fetch('/chat_file', { method: 'POST', body: fd });
         const data = await res.json();
@@ -478,7 +502,7 @@ def upload():
     
     data = file.read()
     if is_pptx:
-        threading.Thread(target=process_pptx, args=(job_id, data, translate_images), daemon=True).start()
+        threading.Thread(target=process_pptx_to_pdf, args=(job_id, data, translate_images), daemon=True).start()
     else:
         threading.Thread(target=process_pdf, args=(job_id, data, translate_images), daemon=True).start()
     
@@ -496,8 +520,8 @@ def download(job_id):
     if not job or job['status'] != 'done' or not job['file']:
         return "الملف غير جاهز", 404
     increment_stat('downloads')
-    ext = 'pptx' if job['type'] == 'pptx' else 'pdf'
-    mimetype = 'application/vnd.openxmlformats-officedocument.presentationml.presentation' if ext == 'pptx' else 'application/pdf'
+    ext = 'pdf' # الملف الناتج دائماً PDF
+    mimetype = 'application/pdf'
     original_name = job.get('original_filename', f"translated.{ext}")
     base_name = original_name.rsplit('.', 1)[0]
     download_name = f"{base_name}_ar.{ext}"
@@ -564,7 +588,11 @@ def chat_file():
         
         if not text.strip(): return jsonify({'error': 'لم يتم العثور على نص'})
         
-        prompt = f"أنت مساعد ذكي. قم بتلخيص النص التالي، أو إعداد اختبار منه إذا طلب منك. النص:\n{text[:5000]}"
+        question = request.form.get('question', '')
+        if question:
+            prompt = f"أنت مساعد ذكي. المستخدم يسأل: {question}\nبناءً على النص التالي:\n{text[:5000]}\nأجب على السؤال باللغة العربية."
+        else:
+            prompt = f"أنت مساعد ذكي. قم بتلخيص النص التالي، أو إعداد اختبار منه إذا طلب منك. النص:\n{text[:5000]}"
         
         last_error = ''
         for model_name in MODELS_TO_TRY:
