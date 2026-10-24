@@ -234,18 +234,28 @@ def chat():
     if len(message) > MAX_CHAT_LEN: return jsonify({'error': 'الرسالة طويلة جداً'})
     if len(history) >= MAX_HISTORY_LEN: return jsonify({'error': 'انتهت المحادثة'})
     if not GEMINI_KEY: return jsonify({'error': 'مفتاح Gemini غير مهيأ'})
-    try:
-        formatted_history = []
-        for msg in history:
-            if msg.get('role') == 'user': formatted_history.append({'role': 'user', 'parts': [msg.get('parts')]})
-            elif msg.get('role') == 'model': formatted_history.append({'role': 'model', 'parts': [msg.get('parts')]})
-        
-        chat_session = gemini_model.start_chat(history=formatted_history)
-        prompt = "أنت مساعد ذكي مفيد جداً اسمه أيمن. أجب باللغة العربية بوضوح وإيجاز. " + message
-        resp = chat_session.send_message(prompt, request_options={'timeout': 30})
-        return jsonify({'reply': resp.text})
-    except Exception as e:
-        return jsonify({'error': f'خطأ تقني: {str(e)[:100]}'})
+    
+    formatted_history = []
+    for msg in history:
+        if msg.get('role') == 'user': formatted_history.append({'role': 'user', 'parts': [msg.get('parts')]})
+        elif msg.get('role') == 'model': formatted_history.append({'role': 'model', 'parts': [msg.get('parts')]})
+    
+    # قائمة النماذج التي سنجربها بالترتيب
+    models_to_try = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.5-pro', 'gemini-2.5-flash-lite']
+    
+    last_error = ''
+    for model_name in models_to_try:
+        try:
+            model = genai.GenerativeModel(model_name)
+            chat_session = model.start_chat(history=formatted_history)
+            prompt = "أنت مساعد ذكي مفيد جداً اسمه أيمن. أجب باللغة العربية بوضوح وإيجاز. " + message
+            resp = chat_session.send_message(prompt, request_options={'timeout': 30})
+            return jsonify({'reply': resp.text})
+        except Exception as e:
+            last_error = str(e)
+            continue
+    
+    return jsonify({'error': f'فشلت جميع النماذج: {last_error[:100]}'})
 
 @app.route('/chat_file', methods=['POST'])
 def chat_file():
