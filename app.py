@@ -305,3 +305,39 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
 
+
+@app.route('/admin-dashboard-secret')
+def admin_dashboard():
+    visitors = 0
+    translated = 0
+    downloads = 0
+    if supabase:
+        try:
+            res = supabase.table('stats').select('*').eq('id', 1).execute()
+            if res.data:
+                visitors = res.data[0].get('visitors', 0)
+                translated = res.data[0].get('translated_files', 0)
+                downloads = res.data[0].get('downloads', 0)
+        except Exception as e:
+            print('Dashboard error:', e)
+            
+    html = f"""
+    <html dir='rtl'><head><title>لوحة التحكم</title>
+    <style>
+    body {{ font-family: sans-serif; background: #1a1a2e; color: #fff; padding: 40px; text-align: center; }}
+    .card {{ background: #2a2a4e; padding: 30px; margin: 20px; border-radius: 15px; display: inline-block; width: 250px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }}
+    .num {{ font-size: 48px; color: #d4af37; font-weight: bold; margin-top: 10px; }}
+    h1 {{ color: #d4af37; }}
+    </style></head><body>
+    <h1>📊 إحصائيات الريان للترجمة</h1>
+    <div class='card'><h3>👁️ الزوار</h3><div class='num'>{visitors}</div></div>
+    <div class='card'><h3>📄 الملفات المترجمة</h3><div class='num'>{translated}</div></div>
+    <div class='card'><h3>📥 التحميلات</h3><div class='num'>{downloads}</div></div>
+    <p style='margin-top: 40px; color: #88ff88;'>✅ هذه الأرقام محفوظة بشكل دائم في قاعدة البيانات.</p>
+    </body></html>
+    """
+    return html
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port)
