@@ -14,6 +14,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from functools import wraps
 from collections import defaultdict
+from supabase import create_client
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
@@ -25,6 +26,26 @@ if GEMINI_KEY:
     import google.generativeai as genai
     genai.configure(api_key=GEMINI_KEY)
     gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+
+
+SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://lmgshabrtmvbnpdhkkst.supabase.co')
+SUPABASE_SERVICE_KEY = os.environ.get('SUPABASE_SERVICE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtZ3NoYWJydG12Ym5wZGhra3N0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjYxNzgyMSwiZXhwIjoyMTA4MTkzODIxfQ.H8-yzWt9XlQEpKFfzSJxXey48u222UGcl5NuvCtATcA')
+supabase = None
+if SUPABASE_URL and SUPABASE_SERVICE_KEY:
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    except Exception as e:
+        print('Supabase error:', e)
+
+def increment_stat(field):
+    if not supabase: return
+    try:
+        res = supabase.table('stats').select(field).eq('id', 1).execute()
+        if res.data:
+            current = res.data[0].get(field, 0)
+            supabase.table('stats').update({field: current + 1}).eq('id', 1).execute()
+    except Exception as e:
+        print('Stat error:', e)
 
 JOBS = {}
 FONT_PATH = "/tmp/Amiri-Regular.ttf"
@@ -259,6 +280,7 @@ def progress(job_id):
 
 @app.route('/download/<job_id>')
 def download(job_id):
+    increment_stat("downloads")
     job = JOBS.get(job_id)
     if not job or job['status'] != 'done' or not job['file']:
         return "الملف غير جاهز", 404

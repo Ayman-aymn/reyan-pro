@@ -7,3 +7,4 @@ reportlab==4.0.7
 requests==2.31.0
 google-generativeai
 gunicorn==21.2.0
+supabase
