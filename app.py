@@ -17,6 +17,15 @@ from collections import defaultdict
 from supabase import create_client
 
 app = Flask(__name__)
+
+@app.after_request
+def add_security_headers(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    return response
+
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 
 DEEPL_KEY = os.environ.get('DEEPL_API_KEY')
@@ -302,6 +311,10 @@ def sw():
     return send_file('sw.js', mimetype='application/javascript')
 
 
+
+
+
+
 CHAT_PAGE = """
 <html dir="rtl">
 <head>
@@ -318,7 +331,6 @@ CHAT_PAGE = """
     .input-area { background: white; padding: 10px; display: flex; gap: 10px; border-top: 1px solid #ddd; }
     .input-area input { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 20px; outline: none; font-size: 15px; }
     .input-area button { background: #5b5bd6; color: white; border: none; padding: 12px 20px; border-radius: 20px; cursor: pointer; font-weight: bold; }
-    .loading { color: #888; font-style: italic; }
 </style>
 </head>
 <body>
@@ -344,7 +356,7 @@ async function sendMsg() {
     const text = input.value.trim();
     addMsg('user', text);
     input.value = '';
-    const loadingDiv = addMsg('ai', '<span class="loading">جاري التفكير...</span>');
+    const loadingDiv = addMsg('ai', 'جاري التفكير...');
     
     try {
         const res = await fetch('/chat', {
@@ -364,14 +376,9 @@ async function sendMsg() {
         loadingDiv.innerHTML = '❌ فشل الاتصال.';
     }
 }
-// بدء المحادثة إذا كان هناك سؤال في الرابط
 window.onload = () => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const q = urlParams.get('q');
-    if(q) {
-        document.getElementById('msgInput').value = q;
-        sendMsg();
-    }
+    const q = new URLSearchParams(window.location.search).get('q');
+    if(q) { document.getElementById('msgInput').value = q; sendMsg(); }
 };
 </script>
 </body>
@@ -420,6 +427,10 @@ def admin_dashboard():
     return html
 
 
+
+
+
+
 CHAT_PAGE = """
 <html dir="rtl">
 <head>
@@ -436,7 +447,6 @@ CHAT_PAGE = """
     .input-area { background: white; padding: 10px; display: flex; gap: 10px; border-top: 1px solid #ddd; }
     .input-area input { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 20px; outline: none; font-size: 15px; }
     .input-area button { background: #5b5bd6; color: white; border: none; padding: 12px 20px; border-radius: 20px; cursor: pointer; font-weight: bold; }
-    .loading { color: #888; font-style: italic; }
 </style>
 </head>
 <body>
@@ -462,7 +472,7 @@ async function sendMsg() {
     const text = input.value.trim();
     addMsg('user', text);
     input.value = '';
-    const loadingDiv = addMsg('ai', '<span class="loading">جاري التفكير...</span>');
+    const loadingDiv = addMsg('ai', 'جاري التفكير...');
     
     try {
         const res = await fetch('/chat', {
@@ -482,14 +492,9 @@ async function sendMsg() {
         loadingDiv.innerHTML = '❌ فشل الاتصال.';
     }
 }
-// بدء المحادثة إذا كان هناك سؤال في الرابط
 window.onload = () => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const q = urlParams.get('q');
-    if(q) {
-        document.getElementById('msgInput').value = q;
-        sendMsg();
-    }
+    const q = new URLSearchParams(window.location.search).get('q');
+    if(q) { document.getElementById('msgInput').value = q; sendMsg(); }
 };
 </script>
 </body>
