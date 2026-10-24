@@ -69,7 +69,7 @@ SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmF
 
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
-    gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+    gemini_model = genai.GenerativeModel('gemini-pro')
 
 supabase = None
 try: supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
@@ -140,7 +140,7 @@ def process_pptx(job_id, data):
                         tr = translate_text(orig)
                         if tr and tr != orig:
                             p = shape.text_frame.add_paragraph()
-                            p.text = tr; p.font.size = Pt(18); p.font.name = 'Arial'
+                            p.text = tr; p.font.size = Pt(28); p.font.name = 'Arial'
                             p.alignment = PP_ALIGN.RIGHT; p.space_before = Pt(10)
             JOBS[job_id]['progress'] = int(((i+1)/total)*100)
         out = io.BytesIO(); prs.save(out); out.seek(0)
