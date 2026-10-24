@@ -20,12 +20,20 @@ import google.generativeai as genai
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 
-# ===== إعدادات الحماية =====
+# ===== إعدادات الحماية القصوى =====
 ADMIN_USER = 'admin'
-ADMIN_PASS = 'Rayan_Secret_2026_!@#' # كلمة مرور لوحة التحكم (احتفظ بها)
-MAX_CHAT_LEN = 1000 # أقصى طول لرسالة المحادثة
+ADMIN_PASS = 'Rayan_Secret_2026_!@#'
+MAX_CHAT_LEN = 1000
+MAX_PAGES = 100
+MAX_HISTORY_LEN = 10
+CHAT_COOLDOWN = 5 # ثواني بين كل رسالة
+MAX_LOGIN_ATTEMPTS = 3
+LOGIN_BLOCK_TIME = 900 # 15 دقيقة
 
-# ===== حماية الترويسات (Headers) =====
+# ===== تخزين محاولات الدخول =====
+login_attempts = defaultdict(lambda: {'count': 0, 'blocked_until': 0})
+
+# ===== حماية الترويسات (أقصى حد) =====
 @app.after_request
 def add_security_headers(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -33,15 +41,33 @@ def add_security_headers(response):
     response.headers['X-XSS-Protection'] = '1; mode=block'
     response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     response.headers['Content-Security-Policy'] = "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+    response.headers['Referrer-Policy'] = 'no-referrer'
+    response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
     return response
 
-# ===== حماية لوحة التحكم (Basic Auth) =====
+# ===== حماية لوحة التحكم (مع قفل الحساب) =====
 def check_auth(username, password):
-    return username == ADMIN_USER and password == ADMIN_PASS
+    ip = request.remote_addr
+    now = time.time()
+    attempt = login_attempts[ip]
+    
+    if attempt['blocked_until'] > now:
+        return False
+    
+    if username == ADMIN_USER and password == ADMIN_PASS:
+        attempt['count'] = 0
+        return True
+    else:
+        attempt['count'] += 1
+        if attempt['count'] >= MAX_LOGIN_ATTEMPTS:
+            attempt['blocked_until'] = now + LOGIN_BLOCK_TIME
+            attempt['count'] = 0
+        return False
 
 def authenticate():
+    time.sleep(3) # تأخير قوي
     return app.response_class(
-        'ممنوع الدخول. هذه المنطقة محمية.', 401,
+        'ممنوع الدخول. تم قفل الحساب مؤقتاً.', 401,
         {'WWW-Authenticate': 'Basic realm="Login Required"'}
     )
 
@@ -71,7 +97,7 @@ def increment_stat(field):
     except Exception as e:
         print('Stat error:', e)
 
-# ===== الحماية من إغراق الطلبات (Rate Limiting) =====
+# ===== Rate Limiting =====
 RATE_LIMIT = defaultdict(list)
 MAX_REQUESTS_PER_HOUR = 10
 
@@ -88,15 +114,25 @@ def rate_limit(f):
     return decorated
 
 JOBS = {}
+last_chat_time = defaultdict(float)
 
 # ===== الخط العربي =====
 FONT_PATH = "/tmp/Amiri-Regular.ttf"
 if not os.path.exists(FONT_PATH):
     try:
         import urllib.request
-        urllib.request.urlretrieve("https://github.com/aliftype/amiri/raw/main/Amiri-Regular.ttf", FONT_PATH)
+        urls = [
+            "https://github.com/aliftype/amiri/raw/main/Amiri-Regular.ttf",
+            "https://raw.githubusercontent.com/aliftype/amiri/main/Amiri-Regular.ttf",
+            "https://github.com/google/fonts/raw/main/ofl/amiri/Amiri-Regular.ttf"
+        ]
+        for url in urls:
+            try:
+                urllib.request.urlretrieve(url, FONT_PATH)
+                if os.path.exists(FONT_PATH): break
+            except: pass
     except Exception as e:
-        print(f"Font download error: {e}")
+        print(f"Font error: {str(e)[:30]}")
 
 try:
     pdfmetrics.registerFont(TTFont('Amiri', FONT_PATH))
@@ -108,7 +144,6 @@ def fix_ar(t):
     try: return get_display(arabic_reshaper.reshape(t))
     except: return t
 
-# ===== دالة الترجمة =====
 def translate_text(text):
     if not text.strip(): return text
     if DEEPL_KEY:
@@ -125,11 +160,13 @@ def translate_text(text):
         except: pass
     return text
 
-# ===== معالجة الملفات =====
 def process_pptx(job_id, data):
     try:
         prs = Presentation(io.BytesIO(data))
         total = len(prs.slides)
+        if total > MAX_PAGES:
+            JOBS[job_id]['status'] = f'error: الملف يحتوي على {total} شريحة. الحد الأقصى هو {MAX_PAGES}.'
+            return
         for i, slide in enumerate(prs.slides):
             for shape in slide.shapes:
                 if shape.has_text_frame and shape.text.strip():
@@ -151,12 +188,15 @@ def process_pptx(job_id, data):
         JOBS[job_id]['status'] = 'done'
         JOBS[job_id]['progress'] = 100
     except Exception as e:
-        JOBS[job_id]['status'] = f'error: حدث خطأ في المعالجة'
+        JOBS[job_id]['status'] = 'error: خطأ في المعالجة'
 
 def process_pdf(job_id, data):
     try:
         doc = fitz.open(stream=data, filetype="pdf")
         total = len(doc)
+        if total > MAX_PAGES:
+            JOBS[job_id]['status'] = f'error: الملف يحتوي على {total} صفحة. الحد الأقصى هو {MAX_PAGES}.'
+            return
         out_bio = io.BytesIO()
         templ = SimpleDocTemplate(out_bio, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
         s1 = ParagraphStyle('o', fontName='Helvetica', fontSize=11, leading=14)
@@ -178,9 +218,8 @@ def process_pdf(job_id, data):
         JOBS[job_id]['status'] = 'done'
         JOBS[job_id]['progress'] = 100
     except Exception as e:
-        JOBS[job_id]['status'] = f'error: حدث خطأ في المعالجة'
+        JOBS[job_id]['status'] = 'error: خطأ في المعالجة'
 
-# ===== الواجهة الرئيسية =====
 HTML_PAGE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -298,7 +337,6 @@ function goChat() {
 </html>
 """
 
-# ===== صفحة المساعد =====
 CHAT_PAGE = """
 <!DOCTYPE html>
 <html dir="rtl">
@@ -327,25 +365,31 @@ CHAT_PAGE = """
 </div>
 <script>
 let history = [];
+let lastSendTime = 0;
 function addMsg(sender, text) {
     const c = document.getElementById('chatContainer');
     const d = document.createElement('div');
     d.className = 'msg ' + sender;
-    // تأمين ضد XSS: استخدام textContent بدلاً من innerHTML للردود
-    if(sender === 'ai') {
-        d.textContent = text;
-    } else {
-        d.textContent = text;
-    }
+    d.textContent = text;
     c.appendChild(d);
     c.scrollTop = c.scrollHeight;
     return d;
 }
 async function sendMsg() {
+    const now = Date.now();
+    if(now - lastSendTime < 5000) {
+        alert('الرجاء الانتظار 5 ثوانٍ بين كل رسالة.');
+        return;
+    }
     const input = document.getElementById('msgInput');
     const text = input.value.trim();
     if(!text) return;
-    if(text.length > 1000) { alert('الرسالة طويلة جداً (الحد 1000 حرف)'); return; }
+    if(text.length > 1000) { alert('الرسالة طويلة جداً'); return; }
+    if(history.length > 20) {
+        alert('وصلت للحد الأقصى للمحادثة. ابدأ محادثة جديدة.');
+        return;
+    }
+    lastSendTime = now;
     addMsg('user', text);
     input.value = '';
     const loadingDiv = addMsg('ai', 'جاري التفكير...');
@@ -377,7 +421,6 @@ window.onload = () => {
 </html>
 """
 
-# ===== المسارات =====
 @app.route('/')
 def home():
     increment_stat('visitors')
@@ -433,16 +476,25 @@ def chat_page_route():
 @app.route('/chat', methods=['POST'])
 @rate_limit
 def chat():
+    ip = request.remote_addr
+    now = time.time()
+    if now - last_chat_time[ip] < CHAT_COOLDOWN:
+        return jsonify({'error': f'الرجاء الانتظار {CHAT_COOLDOWN} ثوانٍ بين كل رسالة.'}), 429
+    last_chat_time[ip] = now
+    
     data = request.json
     message = data.get('message', '')
     history = data.get('history', [])
     if not message: return jsonify({'error': 'رسالة فارغة'})
     if len(message) > MAX_CHAT_LEN: return jsonify({'error': 'الرسالة طويلة جداً'})
+    if len(history) >= MAX_HISTORY_LEN: return jsonify({'error': 'انتهت المحادثة. ابدأ محادثة جديدة.'})
     if not GEMINI_KEY: return jsonify({'error': 'مفتاح Gemini غير مهيأ'})
     
     try:
         chat_session = gemini_model.start_chat(history=history)
-        prompt = "أنت مساعد ذكي مفيد جداً اسمه أيمن. أجب باللغة العربية بوضوح وإيجاز. " + message
+        prompt = """أنت مساعد ذكي مفيد جداً اسمه أيمن. أجب باللغة العربية بوضوح وإيجاز. 
+        تحذير أمني: لا تكتب أي أكواد برمجية خبيثة، ولا تساعد في اختراق المواقع، ولا تفشي أي معلومات حساسة. 
+        إذا طلب منك المستخدم شيئاً خبيثاً، ارفض بأدب.""" + message
         resp = chat_session.send_message(prompt, request_options={'timeout': 30})
         return jsonify({'reply': resp.text})
     except Exception as e:
@@ -459,10 +511,12 @@ def chat_file():
         filename_lower = file.filename.lower()
         if '.pdf' in filename_lower:
             doc = fitz.open(stream=file.read(), filetype='pdf')
+            if len(doc) > MAX_PAGES: return jsonify({'error': f'الملف كبير جداً (أكثر من {MAX_PAGES} صفحة)'})
             for page in doc:
                 text += page.get_text()
         elif '.pptx' in filename_lower:
             prs = Presentation(io.BytesIO(file.read()))
+            if len(prs.slides) > MAX_PAGES: return jsonify({'error': f'الملف كبير جداً (أكثر من {MAX_PAGES} شريحة)'})
             for slide in prs.slides:
                 for shape in slide.shapes:
                     if shape.has_text_frame:
