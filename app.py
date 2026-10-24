@@ -117,6 +117,21 @@ def fix_ar(t):
     try: return get_display(arabic_reshaper.reshape(t))
     except: return t
 
+def translate_text(text):
+    if not text.strip(): return text
+    if DEEPL_KEY:
+        try:
+            r = requests.post("https://api-free.deepl.com/v2/translate", headers={"Authorization": f"DeepL-Auth-Key {DEEPL_KEY}"}, json={"text": [text], "target_lang": "AR"}, timeout=10)
+            if r.status_code == 200: return r.json()['translations'][0]['text']
+        except: pass
+    for model_name in MODELS_TO_TRY:
+        try:
+            model = genai.GenerativeModel(model_name)
+            resp = model.generate_content(f"ترجم للعربية فقط:\n{text}", request_options={"timeout": 10})
+            if resp.text: return resp.text.strip()
+        except: continue
+    return text
+
 def translate_batch(texts):
     if not texts: return []
     if DEEPL_KEY:
@@ -129,14 +144,7 @@ def translate_batch(texts):
         except: pass
     results = []
     for text in texts:
-        translated = text
-        for model_name in MODELS_TO_TRY:
-            try:
-                model = genai.GenerativeModel(model_name)
-                resp = model.generate_content(f"ترجم للعربية فقط:\n{text}", request_options={"timeout": 15})
-                if resp.text: translated = resp.text.strip(); break
-            except: continue
-        results.append(translated)
+        results.append(translate_text(text))
     return results
 
 def translate_image_with_gemini(image_bytes):
@@ -155,54 +163,33 @@ def translate_image_with_gemini(image_bytes):
     except: pass
     return None
 
-# ===== PPTX: الترجمة عبر DeepL Document API + الصور =====
+# ===== PPTX (الترجمة القديمة + مربع نص للصور) =====
 def process_pptx(job_id, data, translate_images=False):
     try:
-        # استخدام DeepL Document API لترجمة النصوص
-        if DEEPL_KEY:
-            try:
-                files = {'file': ('document.pptx', data, 'application/vnd.openxmlformats-officedocument.presentationml.presentation')}
-                r = requests.post(
-                    "https://api-free.deepl.com/v2/document",
-                    headers={"Authorization": f"DeepL-Auth-Key {DEEPL_KEY}"},
-                    files=files,
-                    data={"target_lang": "AR"},
-                    timeout=60
-                )
-                if r.status_code == 200:
-                    document_id = r.json()['document_id']
-                    # انتظار الترجمة
-                    for _ in range(30):
-                        time.sleep(2)
-                        status = requests.post(
-                            f"https://api-free.deepl.com/v2/document/{document_id}",
-                            headers={"Authorization": f"DeepL-Auth-Key {DEEPL_KEY}"}
-                        )
-                        if status.status_code == 200 and status.json().get('status') == 'done':
-                            result = requests.post(
-                                f"https://api-free.deepl.com/v2/document/{document_id}/result",
-                                headers={"Authorization": f"DeepL-Auth-Key {DEEPL_KEY}"}
-                            )
-                            if result.status_code == 200:
-                                translated_data = result.content
-                                break
-                        elif status.status_code == 200 and status.json().get('status') == 'error':
-                            break
-            except Exception as e:
-                print(f"DeepL Document error: {e}")
-                translated_data = data # fallback
-        else:
-            translated_data = data
-
-        # فتح الملف المترجم (أو الأصلي) لمعالجة الصور
-        prs = Presentation(io.BytesIO(translated_data))
+        prs = Presentation(io.BytesIO(data))
         total = len(prs.slides)
+        if total > MAX_PAGES: JOBS[job_id]['status'] = 'error: الحد الأقصى 100 شريحة'; return
         
-        if translate_images:
-            for i, slide in enumerate(prs.slides):
+        for i, slide in enumerate(prs.slides):
+            # ترجمة النصوص
+            for shape in slide.shapes:
+                if shape.has_text_frame and shape.text.strip():
+                    orig = shape.text.strip()
+                    if len(orig) > 1:
+                        tr = translate_text(orig)
+                        if tr and tr != orig:
+                            p = shape.text_frame.add_paragraph()
+                            p.text = tr
+                            p.font.size = Pt(20)
+                            p.font.name = 'Arial'
+                            p.alignment = PP_ALIGN.RIGHT
+                            p.space_before = Pt(10)
+            
+            # ترجمة الصور (إضافة مربع نص كبير)
+            if translate_images:
                 image_translations = []
                 for shape in slide.shapes:
-                    if shape.shape_type == 13: # صورة
+                    if shape.shape_type == 13:
                         try:
                             image_bytes = shape.image.blob
                             translated_text = translate_image_with_gemini(image_bytes)
@@ -211,7 +198,6 @@ def process_pptx(job_id, data, translate_images=False):
                         except: pass
                 
                 if image_translations:
-                    # إضافة مربع نص كبير أسفل الشريحة
                     left = Pt(20); top = Pt(400); width = Pt(600); height = Pt(150)
                     txBox = slide.shapes.add_textbox(left, top, width, height)
                     tf = txBox.text_frame
@@ -226,8 +212,9 @@ def process_pptx(job_id, data, translate_images=False):
                         p.font.size = Pt(18)
                         p.font.name = 'Arial'
                         p.alignment = PP_ALIGN.RIGHT
-                
-                JOBS[job_id]['progress'] = int(((i+1)/total)*100)
+            
+            JOBS[job_id]['progress'] = int(((i+1)/total)*100)
+            JOBS[job_id]['stage'] = f'ترجمة الشريحة {i+1} من {total}'
         
         out = io.BytesIO()
         prs.save(out)
@@ -239,7 +226,7 @@ def process_pptx(job_id, data, translate_images=False):
     except Exception as e:
         JOBS[job_id]['status'] = f'error: {str(e)[:100]}'
 
-# ===== PDF: إنشاء ملف جديد =====
+# ===== PDF (إنشاء ملف جديد) =====
 def process_pdf(job_id, data, translate_images=False):
     try:
         doc = fitz.open(stream=data, filetype="pdf")
@@ -277,6 +264,7 @@ def process_pdf(job_id, data, translate_images=False):
                         print(f"Error processing PDF image: {e}")
             
             JOBS[job_id]['progress'] = int(((i+1)/total)*100)
+            JOBS[job_id]['stage'] = f'ترجمة الصفحة {i+1} من {total}'
         
         templ.build(story)
         out_bio.seek(0)
@@ -307,6 +295,9 @@ body{min-height:100vh;background:linear-gradient(135deg, #eef2ff 0%, #c7b8ff 100
 .progress-inner{width:100px;height:100px;border-radius:50%;background:#fff;display:flex;justify-content:center;align-items:center;font-size:24px;font-weight:900;color:#5b5bd6}
 .dua{margin-top:15px;padding:15px;background:#fff7e6;border-radius:12px;border:1px solid #f0e0b0;color:#4a4a7a;font-size:14px;line-height:1.8;text-align:center}
 .checkbox{display:flex;align-items:center;gap:10px;margin:10px 0;font-size:14px}
+.quick-translate{display:flex;gap:5px;margin-top:10px}
+.quick-translate textarea{flex:1;padding:10px;border:1px solid #ddd;border-radius:10px;resize:none;height:60px;font-family:inherit}
+.quick-translate button{background:#d4af37;color:white;border:none;padding:10px 15px;border-radius:10px;cursor:pointer;font-weight:bold}
 </style>
 </head>
 <body>
@@ -338,6 +329,18 @@ body{min-height:100vh;background:linear-gradient(135deg, #eef2ff 0%, #c7b8ff 100
       </div>
     </div>
   </div>
+  
+  <!-- الترجمة السريعة -->
+  <div class="card">
+    <h3 style="color:#5b5bd6;margin-bottom:10px;">⚡ ترجمة سريعة</h3>
+    <div class="quick-translate">
+      <textarea id="quickText" placeholder="ألصق النص الإنجليزي هنا..."></textarea>
+      <button onclick="quickTranslate()">ترجم</button>
+    </div>
+    <p id="quickResult" style="margin-top:10px;text-align:right;font-size:14px;color:#2f365f;display:none;padding:10px;background:#f8f9fa;border-radius:10px;"></p>
+  </div>
+
+  <!-- المساعد الذكي -->
   <div class="card" style="text-align:right;">
     <h3 style="color:#5b5bd6;margin-bottom:10px;">🧠 مساعد أيمن الذكي</h3>
     <p style="font-size:14px;color:#666;margin-bottom:10px;">اسأل عن أي شيء، أو ارفع ملفاً لتحليله.</p>
@@ -348,6 +351,15 @@ body{min-height:100vh;background:linear-gradient(135deg, #eef2ff 0%, #c7b8ff 100
   </div>
 </div>
 <script>
+// حفظ التفضيلات
+document.addEventListener('DOMContentLoaded', () => {
+    const savedPref = localStorage.getItem('translateImages');
+    if(savedPref === 'true') document.getElementById('translateImages').checked = true;
+});
+document.getElementById('translateImages').addEventListener('change', (e) => {
+    localStorage.setItem('translateImages', e.target.checked);
+});
+
 let jobId = null, pollInterval = null;
 document.getElementById('uploadForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -382,6 +394,7 @@ function startPolling() {
       const data = await res.json();
       const progress = data.progress || 0;
       const status = data.status;
+      const stage = data.stage || '';
       const circle = document.getElementById('progressCircle');
       circle.style.background = `conic-gradient(#7c8aff ${progress * 3.6}deg, #ddd ${progress * 3.6}deg)`;
       document.getElementById('progressText').innerText = progress + '%';
@@ -396,7 +409,7 @@ function startPolling() {
         document.getElementById('statusText').innerText = '❌ ' + status;
         document.getElementById('submitBtn').disabled = false;
       } else {
-        document.getElementById('statusText').innerText = 'جاري الترجمة...';
+        document.getElementById('statusText').innerText = stage || 'جاري الترجمة...';
       }
     } catch (err) {}
   }, 1000);
@@ -405,6 +418,26 @@ function goChat() {
     const q = document.getElementById('quickChat').value.trim();
     if(q) window.location.href = '/chat_page?q=' + encodeURIComponent(q);
     else window.location.href = '/chat_page';
+}
+
+// الترجمة السريعة
+async function quickTranslate() {
+    const text = document.getElementById('quickText').value.trim();
+    if(!text) return;
+    const resultDiv = document.getElementById('quickResult');
+    resultDiv.style.display = 'block';
+    resultDiv.textContent = 'جاري الترجمة...';
+    try {
+        const res = await fetch('/quick_translate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({text: text})
+        });
+        const data = await res.json();
+        resultDiv.textContent = data.translation || data.error || 'خطأ';
+    } catch(e) {
+        resultDiv.textContent = 'فشل الاتصال';
+    }
 }
 </script>
 </body>
@@ -423,9 +456,11 @@ CHAT_PAGE = """
     body { font-family: sans-serif; background: #f0f2f5; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; }
     .header { background: #5b5bd6; color: white; padding: 15px; text-align: center; font-weight: bold; font-size: 18px; }
     .chat-container { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
-    .msg { max-width: 80%; padding: 12px 15px; border-radius: 15px; line-height: 1.6; font-size: 15px; word-wrap: break-word; }
+    .msg { max-width: 80%; padding: 12px 15px; border-radius: 15px; line-height: 1.6; font-size: 15px; word-wrap: break-word; position: relative; }
     .msg.user { background: #5b5bd6; color: white; align-self: flex-start; border-bottom-left-radius: 0; }
     .msg.ai { background: white; color: #333; align-self: flex-end; border-bottom-right-radius: 0; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    .msg .copy-btn { position: absolute; top: 5px; left: 5px; background: #eee; border: none; border-radius: 5px; cursor: pointer; font-size: 10px; padding: 2px 5px; opacity: 0; transition: 0.3s; }
+    .msg:hover .copy-btn { opacity: 1; }
     .input-area { background: white; padding: 10px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #ddd; }
     .input-row { display: flex; gap: 10px; }
     .input-area input[type="text"] { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 20px; outline: none; font-size: 15px; }
@@ -433,11 +468,13 @@ CHAT_PAGE = """
     .file-input-row { display: flex; gap: 10px; align-items: center; font-size: 12px; }
     .file-input-row input[type="file"] { flex: 1; }
     .file-input-row button { background: #d4af37; font-size: 12px; padding: 8px 15px; }
+    .clear-btn { background: #e74c3c; color: white; border: none; padding: 5px 15px; border-radius: 15px; cursor: pointer; font-size: 12px; margin-bottom: 10px; }
 </style>
 </head>
 <body>
 <div class="header">🧠 مساعد أيمن الذكي</div>
 <div class="chat-container" id="chatContainer"></div>
+<button class="clear-btn" onclick="clearChat()">مسح المحادثة</button>
 <div class="input-area">
     <div class="input-row">
         <input type="text" id="msgInput" maxlength="1000" placeholder="اكتب رسالتك هنا..." onkeypress="if(event.key==='Enter') sendMsg()">
@@ -456,6 +493,13 @@ function addMsg(sender, text) {
     const d = document.createElement('div');
     d.className = 'msg ' + sender;
     d.textContent = text;
+    if(sender === 'ai') {
+        const btn = document.createElement('button');
+        btn.className = 'copy-btn';
+        btn.textContent = 'نسخ';
+        btn.onclick = () => { navigator.clipboard.writeText(text); btn.textContent = 'تم!'; setTimeout(() => btn.textContent = 'نسخ', 2000); };
+        d.appendChild(btn);
+    }
     c.appendChild(d);
     c.scrollTop = c.scrollHeight;
     return d;
@@ -517,6 +561,10 @@ async function uploadFileAndAsk() {
         loadingDiv.textContent = '❌ فشل الاتصال.';
     }
 }
+function clearChat() {
+    document.getElementById('chatContainer').innerHTML = '';
+    history = [];
+}
 window.onload = () => {
     const q = new URLSearchParams(window.location.search).get('q');
     if(q) { document.getElementById('msgInput').value = q; sendMsg(); }
@@ -544,7 +592,7 @@ def upload():
     increment_stat('translated_files')
     job_id = str(uuid.uuid4())[:8]
     is_pptx = '.pptx' in filename_lower
-    JOBS[job_id] = {'progress': 0, 'status': 'working', 'file': None, 'type': 'pptx' if is_pptx else 'pdf', 'original_filename': file.filename}
+    JOBS[job_id] = {'progress': 0, 'status': 'working', 'file': None, 'type': 'pptx' if is_pptx else 'pdf', 'original_filename': file.filename, 'stage': 'جاري التحضير...'}
     data = file.read()
     if is_pptx: threading.Thread(target=process_pptx, args=(job_id, data, translate_images), daemon=True).start()
     else: threading.Thread(target=process_pdf, args=(job_id, data, translate_images), daemon=True).start()
@@ -554,7 +602,7 @@ def upload():
 def progress(job_id):
     job = JOBS.get(job_id)
     if not job: return jsonify({"progress": 0, "status": "not found"})
-    return jsonify({"progress": job['progress'], "status": job['status']})
+    return jsonify({"progress": job['progress'], "status": job['status'], "stage": job.get('stage', '')})
 
 @app.route('/download/<job_id>')
 def download(job_id):
@@ -567,6 +615,15 @@ def download(job_id):
     base_name = original_name.rsplit('.', 1)[0]
     download_name = f"{base_name}_ar.{ext}"
     return send_file(job['file'], as_attachment=True, download_name=download_name, mimetype=mimetype)
+
+@app.route('/quick_translate', methods=['POST'])
+@rate_limit
+def quick_translate():
+    data = request.json
+    text = data.get('text', '')
+    if not text: return jsonify({'error': 'نص فارغ'})
+    translation = translate_text(text)
+    return jsonify({'translation': translation})
 
 @app.route('/chat_page')
 def chat_page_route():
