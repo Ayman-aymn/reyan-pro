@@ -164,7 +164,7 @@ def translate_image_with_gemini(image_bytes):
     except: pass
     return None
 
-# ===== PPTX: الترجمة أسفل كل صورة مع مسافة =====
+# ===== PPTX: ترجمة النصوص والصور معاً =====
 def process_pptx(job_id, data, translate_images=False):
     try:
         prs = Presentation(io.BytesIO(data))
@@ -172,7 +172,7 @@ def process_pptx(job_id, data, translate_images=False):
         if total > MAX_PAGES: JOBS[job_id]['status'] = 'error: الحد الأقصى 100 شريحة'; return
         
         for i, slide in enumerate(prs.slides):
-            # 1. ترجمة النصوص العادية
+            # 1. ترجمة النصوص العادية (Text Boxes)
             for shape in slide.shapes:
                 if shape.has_text_frame and shape.text.strip():
                     orig = shape.text.strip()
@@ -181,7 +181,7 @@ def process_pptx(job_id, data, translate_images=False):
                         if tr and tr != orig:
                             p = shape.text_frame.add_paragraph()
                             p.text = tr
-                            p.font.size = Pt(20)
+                            p.font.size = Pt(28) # تكبير الخط
                             p.font.name = 'Arial'
                             p.alignment = PP_ALIGN.RIGHT
                             p.space_before = Pt(10)
@@ -203,19 +203,19 @@ def process_pptx(job_id, data, translate_images=False):
                                 textbox_top = top + height + Pt(30)
                                 textbox_left = left
                                 textbox_width = width
-                                textbox_height = Pt(80) # ارتفاع أكبر
+                                textbox_height = Pt(120) # تكبير الارتفاع
                                 
                                 txBox = slide.shapes.add_textbox(textbox_left, textbox_top, textbox_width, textbox_height)
                                 tf = txBox.text_frame
                                 tf.word_wrap = True
                                 tf.text = "ترجمة الصورة:"
-                                tf.paragraphs[0].font.size = Pt(16)
+                                tf.paragraphs[0].font.size = Pt(20) # تكبير الخط
                                 tf.paragraphs[0].font.name = 'Arial'
                                 tf.paragraphs[0].alignment = PP_ALIGN.RIGHT
                                 
                                 p = tf.add_paragraph()
                                 p.text = translated_text
-                                p.font.size = Pt(18)
+                                p.font.size = Pt(24) # تكبير الخط
                                 p.font.name = 'Arial'
                                 p.alignment = PP_ALIGN.RIGHT
                                 
