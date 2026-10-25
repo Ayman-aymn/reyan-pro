@@ -14,7 +14,7 @@ def translate_image(image):
     try:
         r = requests.post(
             "https://api-free.deepl.com/v2/translate",
-            headers={"Authorization": "DeepL-Auth-Key YOUR_DEEPL_KEY"},
+            headers={"Authorization": "DeepL-Auth-Key 48f7080d-9ff3-4fd6-9b9d-bf532edc7342:fx"},
             json={"text": [text], "target_lang": "AR"},
             timeout=10
         )
