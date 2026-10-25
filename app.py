@@ -3,6 +3,7 @@ from flask import Flask, request, jsonify, send_file, render_template_string
 from pptx import Presentation
 from pptx.util import Pt
 from pptx.enum.text import PP_ALIGN
+from pptx.dml.color import RGBColor
 import fitz
 import requests
 import arabic_reshaper
@@ -147,45 +148,23 @@ def translate_batch(texts):
         results.append(translate_text(text))
     return results
 
-# ===== ترجمة دفعة صور باستخدام Gemini =====
-def translate_images_batch(image_bytes_list):
-    if not image_bytes_list: return []
-    
-    # تحويل الصور إلى base64
-    images_data = []
-    for img_bytes in image_bytes_list:
-        img_b64 = base64.b64encode(img_bytes).decode('utf-8')
-        images_data.append({'mime_type': 'image/jpeg', 'data': img_b64})
-    
-    for model_name in MODELS_TO_TRY:
-        try:
-            model = genai.GenerativeModel(model_name)
-            prompt = "استخرج النص من كل صورة من هذه الصور وترجمه إلى العربية. أعد النتائج كقائمة (JSON array) بنفس ترتيب الصور، كل عنصر يحتوي على الترجمة فقط."
-            
-            # إرسال كل الصور معاً
-            content = images_data + [prompt]
-            resp = model.generate_content(content, request_options={"timeout": 60})
-            
-            if resp.text:
-                try:
-                    import json
-                    cleaned = resp.text.strip()
-                    if cleaned.startswith('```'):
-                        cleaned = cleaned.split('```')[1]
-                        if cleaned.startswith('json'):
-                            cleaned = cleaned[4:]
-                        cleaned = cleaned.strip()
-                    result = json.loads(cleaned)
-                    if isinstance(result, list) and len(result) == len(image_bytes_list):
-                        return result
-                except:
-                    # إذا فشل JSON، نعيد النص كاملاً
-                    return [resp.text.strip()] * len(image_bytes_list)
-        except: continue
-    
-    return [None] * len(image_bytes_list)
+def translate_image_with_gemini(image_bytes):
+    try:
+        img_b64 = base64.b64encode(image_bytes).decode('utf-8')
+        for model_name in MODELS_TO_TRY:
+            try:
+                model = genai.GenerativeModel(model_name)
+                prompt = "استخرج النص من هذه الصورة وترجمه إلى العربية. أعد الترجمة فقط."
+                resp = model.generate_content(
+                    [{'mime_type': 'image/jpeg', 'data': img_b64}, prompt],
+                    request_options={"timeout": 30}
+                )
+                if resp.text: return resp.text.strip()
+            except: continue
+    except: pass
+    return None
 
-# ===== PPTX: الترجمة أسفل كل صورة =====
+# ===== PPTX: الترجمة أسفل كل صورة مع مسافة =====
 def process_pptx(job_id, data, translate_images=False):
     try:
         prs = Presentation(io.BytesIO(data))
@@ -207,32 +186,24 @@ def process_pptx(job_id, data, translate_images=False):
                             p.alignment = PP_ALIGN.RIGHT
                             p.space_before = Pt(10)
             
-            # 2. ترجمة الصور (دفعة واحدة لكل شريحة)
+            # 2. ترجمة الصور (كل صورة على حدة)
             if translate_images:
-                image_shapes = []
-                image_bytes_list = []
                 for shape in slide.shapes:
-                    if shape.shape_type == 13:
+                    if shape.shape_type == 13: # صورة
                         try:
                             image_bytes = shape.image.blob
-                            image_shapes.append(shape)
-                            image_bytes_list.append(image_bytes)
-                        except: pass
-                
-                if image_bytes_list:
-                    translated_texts = translate_images_batch(image_bytes_list)
-                    for shape, translated_text in zip(image_shapes, translated_texts):
-                        if translated_text:
-                            try:
+                            translated_text = translate_image_with_gemini(image_bytes)
+                            if translated_text:
                                 left = shape.left
                                 top = shape.top
                                 width = shape.width
                                 height = shape.height
                                 
-                                textbox_top = top + height + Pt(10)
+                                # مسافة أمان 30 نقطة
+                                textbox_top = top + height + Pt(30)
                                 textbox_left = left
                                 textbox_width = width
-                                textbox_height = Pt(60)
+                                textbox_height = Pt(80) # ارتفاع أكبر
                                 
                                 txBox = slide.shapes.add_textbox(textbox_left, textbox_top, textbox_width, textbox_height)
                                 tf = txBox.text_frame
@@ -247,7 +218,13 @@ def process_pptx(job_id, data, translate_images=False):
                                 p.font.size = Pt(18)
                                 p.font.name = 'Arial'
                                 p.alignment = PP_ALIGN.RIGHT
-                            except: pass
+                                
+                                # إضافة خلفية بيضاء
+                                fill = txBox.fill
+                                fill.solid()
+                                fill.fore_color.rgb = RGBColor(255, 255, 255)
+                        except Exception as e:
+                            print(f"Error processing image: {e}")
             
             JOBS[job_id]['progress'] = int(((i+1)/total)*100)
             JOBS[job_id]['stage'] = f'ترجمة الشريحة {i+1} من {total}'
@@ -287,20 +264,17 @@ def process_pdf(job_id, data, translate_images=False):
                         story.append(Spacer(1, 8))
             
             if translate_images:
-                images_to_translate = []
                 for img_index, img in enumerate(page.get_images(full=True)):
                     try:
                         xref = img[0]
                         base_image = doc.extract_image(xref)
-                        images_to_translate.append(base_image["image"])
-                    except: pass
-                
-                if images_to_translate:
-                    translated_texts = translate_images_batch(images_to_translate)
-                    for idx, translated_text in enumerate(translated_texts):
+                        image_bytes = base_image["image"]
+                        translated_text = translate_image_with_gemini(image_bytes)
                         if translated_text:
-                            story.append(Paragraph(f"[ترجمة الصورة {idx+1}]: {fix_ar(translated_text)}", s_ar))
+                            story.append(Paragraph(f"[ترجمة الصورة {img_index+1}]: {fix_ar(translated_text)}", s_ar))
                             story.append(Spacer(1, 8))
+                    except Exception as e:
+                        print(f"Error processing PDF image: {e}")
             
             JOBS[job_id]['progress'] = int(((i+1)/total)*100)
             JOBS[job_id]['stage'] = f'ترجمة الصفحة {i+1} من {total}'
