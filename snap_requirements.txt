@@ -1,0 +1,3 @@
+gradio
+easyocr
+requests
