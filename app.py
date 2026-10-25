@@ -164,78 +164,128 @@ def translate_image_with_gemini(image_bytes):
     except: pass
     return None
 
-# ===== PPTX: ترجمة النصوص والصور معاً =====
-def process_pptx(job_id, data, translate_images=False):
+# ===== PPTX: ترجمة النصوص والصور معاً + خيار تحويل إلى PDF =====
+def process_pptx(job_id, data, translate_images=False, to_pdf=False):
     try:
         prs = Presentation(io.BytesIO(data))
         total = len(prs.slides)
         if total > MAX_PAGES: JOBS[job_id]['status'] = 'error: الحد الأقصى 100 شريحة'; return
         
-        for i, slide in enumerate(prs.slides):
-            # 1. ترجمة النصوص العادية (Text Boxes)
-            for shape in slide.shapes:
-                if shape.has_text_frame and shape.text.strip():
-                    orig = shape.text.strip()
-                    if len(orig) > 1:
-                        tr = translate_text(orig)
-                        if tr and tr != orig:
-                            p = shape.text_frame.add_paragraph()
-                            p.text = tr
-                            p.font.size = Pt(28) # تكبير الخط
-                            p.font.name = 'Arial'
-                            p.alignment = PP_ALIGN.RIGHT
-                            p.space_before = Pt(10)
+        if to_pdf:
+            # إنشاء ملف PDF جديد بالترتيب المطلوب (نص أصلي ثم ترجمة)
+            out_bio = io.BytesIO()
+            templ = SimpleDocTemplate(out_bio, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
+            s_en = ParagraphStyle('en', fontName='Helvetica', fontSize=12, leading=16)
+            s_ar = ParagraphStyle('ar', fontName=ARABIC_FONT, fontSize=14, leading=18, alignment=2)
+            story = []
             
-            # 2. ترجمة الصور (كل صورة على حدة)
-            if translate_images:
+            for i, slide in enumerate(prs.slides):
+                story.append(Paragraph(f"--- شريحة {i+1} ---", s_en))
+                story.append(Spacer(1, 10))
+                
+                # جمع النصوص الإنجليزية من الشريحة
+                english_texts = []
                 for shape in slide.shapes:
-                    if shape.shape_type == 13: # صورة
-                        try:
-                            image_bytes = shape.image.blob
-                            translated_text = translate_image_with_gemini(image_bytes)
-                            if translated_text:
-                                left = shape.left
-                                top = shape.top
-                                width = shape.width
-                                height = shape.height
-                                
-                                # مسافة أمان 30 نقطة
-                                textbox_top = top + height + Pt(30)
-                                textbox_left = left
-                                textbox_width = width
-                                textbox_height = Pt(120) # تكبير الارتفاع
-                                
-                                txBox = slide.shapes.add_textbox(textbox_left, textbox_top, textbox_width, textbox_height)
-                                tf = txBox.text_frame
-                                tf.word_wrap = True
-                                tf.text = "ترجمة الصورة:"
-                                tf.paragraphs[0].font.size = Pt(20) # تكبير الخط
-                                tf.paragraphs[0].font.name = 'Arial'
-                                tf.paragraphs[0].alignment = PP_ALIGN.RIGHT
-                                
-                                p = tf.add_paragraph()
-                                p.text = translated_text
-                                p.font.size = Pt(24) # تكبير الخط
+                    if shape.has_text_frame and shape.text.strip():
+                        orig = shape.text.strip()
+                        if len(orig) > 1:
+                            english_texts.append(orig)
+                
+                if english_texts:
+                    # كتابة النص الإنجليزي كاملاً
+                    for eng in english_texts:
+                        story.append(Paragraph(eng, s_en))
+                        story.append(Spacer(1, 5))
+                    
+                    # مسافة أمان
+                    story.append(Spacer(1, 20))
+                    
+                    # ترجمة النصوص وكتابتها
+                    translations = translate_batch(english_texts)
+                    for tr in translations:
+                        story.append(Paragraph(fix_ar(tr), s_ar))
+                        story.append(Spacer(1, 10))
+                
+                # ترجمة الصور (اختياري)
+                if translate_images:
+                    for shape in slide.shapes:
+                        if shape.shape_type == 13:
+                            try:
+                                image_bytes = shape.image.blob
+                                translated_text = translate_image_with_gemini(image_bytes)
+                                if translated_text:
+                                    story.append(Paragraph(f"[ترجمة الصورة]: {fix_ar(translated_text)}", s_ar))
+                                    story.append(Spacer(1, 10))
+                            except: pass
+                
+                story.append(Spacer(1, 30))
+                JOBS[job_id]['progress'] = int(((i+1)/total)*100)
+                JOBS[job_id]['stage'] = f'ترجمة الشريحة {i+1} من {total}'
+            
+            templ.build(story)
+            out_bio.seek(0)
+            JOBS[job_id]['file'] = out_bio
+            JOBS[job_id]['status'] = 'done'
+            JOBS[job_id]['progress'] = 100
+            JOBS[job_id]['type'] = 'pdf'
+        else:
+            # الترجمة العادية داخل PPTX (كما كان)
+            for i, slide in enumerate(prs.slides):
+                for shape in slide.shapes:
+                    if shape.has_text_frame and shape.text.strip():
+                        orig = shape.text.strip()
+                        if len(orig) > 1:
+                            tr = translate_text(orig)
+                            if tr and tr != orig:
+                                p = shape.text_frame.add_paragraph()
+                                p.text = tr
+                                p.font.size = Pt(28)
                                 p.font.name = 'Arial'
                                 p.alignment = PP_ALIGN.RIGHT
-                                
-                                # إضافة خلفية بيضاء
-                                fill = txBox.fill
-                                fill.solid()
-                                fill.fore_color.rgb = RGBColor(255, 255, 255)
-                        except Exception as e:
-                            print(f"Error processing image: {e}")
+                                p.space_before = Pt(10)
+                
+                if translate_images:
+                    for shape in slide.shapes:
+                        if shape.shape_type == 13:
+                            try:
+                                image_bytes = shape.image.blob
+                                translated_text = translate_image_with_gemini(image_bytes)
+                                if translated_text:
+                                    left = shape.left
+                                    top = shape.top
+                                    width = shape.width
+                                    height = shape.height
+                                    textbox_top = top + height + Pt(30)
+                                    textbox_left = left
+                                    textbox_width = width
+                                    textbox_height = Pt(120)
+                                    txBox = slide.shapes.add_textbox(textbox_left, textbox_top, textbox_width, textbox_height)
+                                    tf = txBox.text_frame
+                                    tf.word_wrap = True
+                                    tf.text = "ترجمة الصورة:"
+                                    tf.paragraphs[0].font.size = Pt(20)
+                                    tf.paragraphs[0].font.name = 'Arial'
+                                    tf.paragraphs[0].alignment = PP_ALIGN.RIGHT
+                                    p = tf.add_paragraph()
+                                    p.text = translated_text
+                                    p.font.size = Pt(24)
+                                    p.font.name = 'Arial'
+                                    p.alignment = PP_ALIGN.RIGHT
+                                    fill = txBox.fill
+                                    fill.solid()
+                                    fill.fore_color.rgb = RGBColor(255, 255, 255)
+                            except: pass
+                
+                JOBS[job_id]['progress'] = int(((i+1)/total)*100)
+                JOBS[job_id]['stage'] = f'ترجمة الشريحة {i+1} من {total}'
             
-            JOBS[job_id]['progress'] = int(((i+1)/total)*100)
-            JOBS[job_id]['stage'] = f'ترجمة الشريحة {i+1} من {total}'
-        
-        out = io.BytesIO()
-        prs.save(out)
-        out.seek(0)
-        JOBS[job_id]['file'] = out
-        JOBS[job_id]['status'] = 'done'
-        JOBS[job_id]['progress'] = 100
-        JOBS[job_id]['type'] = 'pptx'
+            out = io.BytesIO()
+            prs.save(out)
+            out.seek(0)
+            JOBS[job_id]['file'] = out
+            JOBS[job_id]['status'] = 'done'
+            JOBS[job_id]['progress'] = 100
+            JOBS[job_id]['type'] = 'pptx'
     except Exception as e:
         JOBS[job_id]['status'] = f'error: {str(e)[:100]}'
 
@@ -273,8 +323,7 @@ def process_pdf(job_id, data, translate_images=False):
                         if translated_text:
                             story.append(Paragraph(f"[ترجمة الصورة {img_index+1}]: {fix_ar(translated_text)}", s_ar))
                             story.append(Spacer(1, 8))
-                    except Exception as e:
-                        print(f"Error processing PDF image: {e}")
+                    except: pass
             
             JOBS[job_id]['progress'] = int(((i+1)/total)*100)
             JOBS[job_id]['stage'] = f'ترجمة الصفحة {i+1} من {total}'
@@ -317,12 +366,16 @@ body{min-height:100vh;background:linear-gradient(135deg, #eef2ff 0%, #c7b8ff 100
 <div class="app">
   <div class="card">
     <h2 style="color:#5b5bd6;margin-bottom:10px">الريان للترجمة</h2>
-    <p style="color:#6b6b9a;margin-bottom:15px">رفع ملف PPTX أو PDF لترجمة النصوص (سينتج ملف PDF)</p>
+    <p style="color:#6b6b9a;margin-bottom:15px">رفع ملف PPTX أو PDF لترجمة النصوص</p>
     <form id="uploadForm" enctype="multipart/form-data">
       <input type="file" name="file" accept=".pptx,.pdf" required style="width:100%;margin-bottom:10px">
       <div class="checkbox">
         <input type="checkbox" id="translateImages">
         <label for="translateImages">ترجمة الصور أيضاً (أبطأ)</label>
+      </div>
+      <div class="checkbox">
+        <input type="checkbox" id="toPdf">
+        <label for="toPdf">تحويل إلى PDF (ترتيب: نص أصلي ثم ترجمة)</label>
       </div>
       <button type="submit" class="btn" id="submitBtn">ترجمة الملف</button>
     </form>
@@ -377,7 +430,9 @@ document.getElementById('uploadForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const formData = new FormData(e.target);
   const translateImages = document.getElementById('translateImages').checked;
+  const toPdf = document.getElementById('toPdf').checked;
   formData.append('translate_images', translateImages ? 'true' : 'false');
+  formData.append('to_pdf', toPdf ? 'true' : 'false');
   
   document.getElementById('submitBtn').disabled = true;
   document.getElementById('progressContainer').style.display = 'block';
@@ -599,12 +654,13 @@ def upload():
     if not ('.pptx' in filename_lower or '.pdf' in filename_lower):
         return jsonify({"error": "الملف يجب أن يكون PPTX أو PDF"}), 400
     translate_images = request.form.get('translate_images') == 'true'
+    to_pdf = request.form.get('to_pdf') == 'true'
     increment_stat('translated_files')
     job_id = str(uuid.uuid4())[:8]
     is_pptx = '.pptx' in filename_lower
     JOBS[job_id] = {'progress': 0, 'status': 'working', 'file': None, 'type': 'pptx' if is_pptx else 'pdf', 'original_filename': file.filename, 'stage': 'جاري التحضير...'}
     data = file.read()
-    if is_pptx: threading.Thread(target=process_pptx, args=(job_id, data, translate_images), daemon=True).start()
+    if is_pptx: threading.Thread(target=process_pptx, args=(job_id, data, translate_images, to_pdf), daemon=True).start()
     else: threading.Thread(target=process_pdf, args=(job_id, data, translate_images), daemon=True).start()
     return jsonify({"job_id": job_id})
 
