@@ -360,6 +360,7 @@ def process_pptx(job_id, data, translate_images=False, to_pdf=False):
                                 p.font.name = 'Arial'
                                 p.alignment = PP_ALIGN.RIGHT
                                 p.space_before = Pt(10)
+                
                 if translate_images:
                     for shape in slide.shapes:
                         if shape.shape_type == 13:
@@ -404,7 +405,7 @@ def process_pptx(job_id, data, translate_images=False, to_pdf=False):
     except Exception as e:
         JOBS[job_id]['status'] = f'error: {str(e)[:100]}'
 
-# ===== PDF =====
+
 def process_pdf(job_id, data, translate_images=False):
     try:
         doc = fitz.open(stream=data, filetype="pdf")
