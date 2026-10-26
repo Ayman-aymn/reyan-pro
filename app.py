@@ -584,25 +584,11 @@ button{background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none
 <body>
 <div class="container">
 <h1>💬 التعليقات والاقتراحات</h1>
-<div id="feedbackForm">
-<input type="text" id="fb_name" placeholder="اسمك (اختياري)" maxlength="50">
-<textarea id="fb_message" placeholder="اكتب تعليقك أو اقتراحك هنا..." required maxlength="500"></textarea>
-<button onclick="submitFeedback()">إرسال</button>
-</div>
-<script>
-async function submitFeedback() {
-    const name = document.getElementById('fb_name').value;
-    const message = document.getElementById('fb_message').value;
-    const res = await fetch('/api/submit_feedback', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({name: name, message: message})
-    });
-    const data = await res.json();
-    if (data.error) { alert('خطأ: ' + data.error); }
-    else { window.location.href = '/feedback'; }
-}
-</script>
+<form action="/submit_feedback" method="POST">
+<input type="text" name="name" placeholder="اسمك (اختياري)" maxlength="50">
+<textarea name="message" placeholder="اكتب تعليقك أو اقتراحك هنا..." required maxlength="500"></textarea>
+<button type="submit">إرسال</button>
+</form>
 <hr style="margin:20px 0;border:1px solid #eee;">
 <h2 style="color:#5b5bd6;margin-bottom:15px;">آخر التعليقات</h2>
 <div id="comments_list">
@@ -642,29 +628,13 @@ button{background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none
 <div class="container">
 <h1>🌐 مجتمع الريان</h1>
 <p style="margin-bottom:20px;">تواصل مع طلاب من جامعتك، واطلب المساعدة.</p>
-<div id="communityForm">
-<input type="text" id="post_name" placeholder="اسمك" required maxlength="50">
-<input type="text" id="post_university" placeholder="جامعتك (مثال: جامعة أم درمان الإسلامية)" required maxlength="100">
-<textarea id="post_message" placeholder="اكتب طلبك أو سؤالك هنا..." required maxlength="500"></textarea>
-<input type="text" id="post_whatsapp" placeholder="رقم واتساب (اختياري - للتواصل)" maxlength="20">
-<button onclick="submitPost()">نشر</button>
-</div>
-<script>
-async function submitPost() {
-    const name = document.getElementById('post_name').value;
-    const university = document.getElementById('post_university').value;
-    const message = document.getElementById('post_message').value;
-    const whatsapp = document.getElementById('post_whatsapp').value;
-    const res = await fetch('/api/submit_post', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({name: name, university: university, message: message, whatsapp: whatsapp})
-    });
-    const data = await res.json();
-    if (data.error) { alert('خطأ: ' + data.error); }
-    else { window.location.href = '/community'; }
-}
-</script>
+<form action="/submit_post" method="POST">
+<input type="text" name="name" placeholder="اسمك" required maxlength="50">
+<input type="text" name="university" placeholder="جامعتك (مثال: جامعة أم درمان الإسلامية)" required maxlength="100">
+<textarea name="message" placeholder="اكتب طلبك أو سؤالك هنا..." required maxlength="500"></textarea>
+<input type="text" name="whatsapp" placeholder="رقم واتساب (اختياري - للتواصل)" maxlength="20">
+<button type="submit">نشر</button>
+</form>
 <hr style="margin:20px 0;border:1px solid #eee;">
 <h2 style="color:#5b5bd6;margin-bottom:15px;">آخر المنشورات</h2>
 <div id="posts_list">
