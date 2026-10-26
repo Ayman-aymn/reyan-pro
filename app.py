@@ -803,8 +803,11 @@ def submit_feedback():
     message = request.form.get('message', '')
     if supabase and message:
         try:
-            supabase.table('feedback').insert({'name': name[:50], 'message': message[:500]}).execute()
-        except: pass
+            res = supabase.table('feedback').insert({'name': name[:50], 'message': message[:500]}).execute()
+            print('Feedback insert response:', res)
+        except Exception as e:
+            print('Feedback insert error:', e)
+            return f'<h3>حدث خطأ:</h3><pre>{e}</pre><br><a href="/feedback">العودة</a>'
     return redirect('/feedback')
 
 @app.route('/community')
@@ -833,10 +836,13 @@ def submit_post():
     whatsapp = request.form.get('whatsapp', '')
     if supabase and name and university and message:
         try:
-            supabase.table('community_posts').insert({
+            res = supabase.table('community_posts').insert({
                 'name': name[:50], 'university': university[:100], 'message': message[:500], 'whatsapp': whatsapp[:20]
             }).execute()
-        except: pass
+            print('Post insert response:', res)
+        except Exception as e:
+            print('Post insert error:', e)
+            return f'<h3>حدث خطأ:</h3><pre>{e}</pre><br><a href="/community">العودة</a>'
     return redirect('/community')
 
 @app.route('/about')
