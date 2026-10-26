@@ -16,7 +16,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from functools import wraps
 from collections import defaultdict
 from supabase import create_client
-from google import genai
+import google.generativeai as genai
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
@@ -30,7 +30,7 @@ MAX_HISTORY_LEN = 44
 CHAT_COOLDOWN = 2
 MAX_LOGIN_ATTEMPTS = 3
 LOGIN_BLOCK_TIME = 900
-MODELS_TO_TRY = ['gemini-2.5-flash', 'gemini-2.5-flash-lite']
+MODELS_TO_TRY = ['gemini-1.5-flash']
 WHATSAPP_NUMBER = '249925284869'
 PHONE_NUMBER = '+249925284869'
 WHATSAPP_CHANNEL = 'https://whatsapp.com/channel/0029VbDbf1V9MF8xMszlN61S'
@@ -74,7 +74,7 @@ SUPABASE_URL = os.environ.get('SUPABASE_URL')
 SUPABASE_SERVICE_KEY = os.environ.get('SUPABASE_SERVICE_KEY')
 
 if GEMINI_KEY:
-    genai_client = genai.Client(api_key=GEMINI_KEY)
+    genai.configure(api_key=GEMINI_KEY)
 
 supabase = None
 if SUPABASE_URL and SUPABASE_SERVICE_KEY:
@@ -731,9 +731,10 @@ def chat():
     last_error = ''
     for model_name in MODELS_TO_TRY:
         try:
-            chat = genai_client.chats.create(model=model_name, history=formatted_history)
+            model = genai.GenerativeModel(model_name)
+            chat_session = model.start_chat(history=formatted_history)
             prompt = "أنت مساعد ذكي مفيد جداً اسمه أيمن. أجب باللغة العربية بوضوح وإيجاز. " + message
-            resp = chat.send_message(prompt)
+            resp = chat_session.send_message(prompt, request_options={'timeout': 30})
             return jsonify({'reply': resp.text})
         except Exception as e:
             last_error = str(e)
