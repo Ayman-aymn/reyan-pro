@@ -391,7 +391,8 @@ def process_pptx(job_id, data, translate_images=False, to_pdf=False):
                                     fill = txBox.fill
                                     fill.solid()
                                     fill.fore_color.rgb = RGBColor(255, 255, 255)
-                            except: pass
+                            except Exception as e:
+                                print(f"Error processing image: {e}")
                 JOBS[job_id]['progress'] = int(((i+1)/total)*100)
                 JOBS[job_id]['stage'] = f'ترجمة الشريحة {i+1} من {total}'
             
