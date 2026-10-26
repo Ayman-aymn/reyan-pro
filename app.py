@@ -1,5 +1,5 @@
 import os, io, uuid, json, threading, time, re, base64, tempfile
-from flask import Flask, request, jsonify, send_file, render_template_string
+from flask import Flask, request, jsonify, send_file, render_template_string, send_from_directory
 from pptx import Presentation
 from pptx.util import Pt
 from pptx.enum.text import PP_ALIGN
@@ -33,6 +33,7 @@ LOGIN_BLOCK_TIME = 900
 MODELS_TO_TRY = ['gemini-3.5-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite-preview', 'gemini-3-flash-preview']
 WHATSAPP_NUMBER = '249925284869'
 PHONE_NUMBER = '+249925284869'
+SITE_URL = 'https://reyan-pro.onrender.com'
 
 login_attempts = defaultdict(lambda: {'count': 0, 'blocked_until': 0})
 last_chat_time = defaultdict(float)
@@ -322,6 +323,23 @@ def process_pdf(job_id, data, translate_images=False):
     except Exception as e:
         JOBS[job_id]['status'] = f'error: {str(e)[:100]}'
 
+# ===== SEO: sitemap.xml =====
+SITEMAP_XML = f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>{SITE_URL}/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>
+  <url><loc>{SITE_URL}/about</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>{SITE_URL}/contact</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>{SITE_URL}/privacy</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>{SITE_URL}/terms</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>{SITE_URL}/faq</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+</urlset>"""
+
+# ===== SEO: robots.txt =====
+ROBOTS_TXT = f"""User-agent: *
+Allow: /
+Sitemap: {SITE_URL}/sitemap.xml
+"""
+
 # ===== الواجهة الرئيسية =====
 HTML_PAGE = """
 <!DOCTYPE html>
@@ -329,7 +347,9 @@ HTML_PAGE = """
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>الريان للترجمة</title>
+<title>الريان للترجمة | ترجمة ملفات PDF و PPTX</title>
+<meta name="description" content="منصة الريان للترجمة: ترجمة ملفات PDF و PPTX والنصوص من الإنجليزية إلى العربية مجاناً. ترجمة دقيقة وسريعة مع الحفاظ على التنسيق.">
+<meta name="keywords" content="ترجمة, ترجمة ملفات, ترجمة PDF, ترجمة PPTX, الريان للترجمة">
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box;font-family:'Tajawal',sans-serif}
@@ -385,7 +405,6 @@ body{min-height:100vh;background:linear-gradient(135deg, #eef2ff 0%, #c7b8ff 100
     </div>
   </div>
   
-  <!-- الترجمة السريعة -->
   <div class="card">
     <h3 style="color:#5b5bd6;margin-bottom:10px;">⚡ ترجمة سريعة</h3>
     <div class="quick-translate">
@@ -395,7 +414,6 @@ body{min-height:100vh;background:linear-gradient(135deg, #eef2ff 0%, #c7b8ff 100
     <p id="quickResult" style="margin-top:10px;text-align:right;font-size:14px;color:#2f365f;display:none;padding:10px;background:#f8f9fa;border-radius:10px;"></p>
   </div>
 
-  <!-- المساعد الذكي -->
   <div class="card" style="text-align:right;">
     <h3 style="color:#5b5bd6;margin-bottom:10px;">🧠 مساعد أيمن الذكي</h3>
     <p style="font-size:14px;color:#666;margin-bottom:10px;">اسأل عن أي شيء، أو ارفع ملفاً لتحليله.</p>
@@ -506,31 +524,39 @@ async function quickTranslate() {
 </html>
 """
 
-# ===== الصفحات الجديدة =====
+# ===== الصفحات =====
 ABOUT_PAGE = """
-<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>من نحن</title><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:40px;text-align:center;} .container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);} h1{color:#5b5bd6;} p{line-height:1.8;font-size:16px;text-align:right;}</style></head><body><div class="container"><h1>من نحن</h1><p>الريان للترجمة هي منصة رقمية مجانية تهدف إلى تسهيل ترجمة الملفات الأكاديمية (PDF و PPTX) للطلاب والباحثين في العالم العربي. انطلقت المنصة من السودان، وتستخدم أحدث تقنيات الذكاء الاصطناعي (مثل Gemini و DeepL) لتقديم ترجمات دقيقة وسريعة، مع الحفاظ على تنسيق الملفات الأصلية. نؤمن بأن المعرفة لا تحدها حدود، ونسعى لجعل المحتوى العلمي متاحاً للجميع بأسهل طريقة.</p><br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a></div></body></html>
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>من نحن | الريان للترجمة</title><meta name="description" content="تعرف على منصة الريان للترجمة، أهدافها، وكيف تساعد الطلاب والباحثين في ترجمة الملفات."><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:40px;text-align:center;} .container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);} h1{color:#5b5bd6;} p{line-height:1.8;font-size:16px;text-align:right;}</style></head><body><div class="container"><h1>من نحن</h1><p>الريان للترجمة هي منصة رقمية مجانية تهدف إلى تسهيل ترجمة الملفات الأكاديمية (PDF و PPTX) للطلاب والباحثين في العالم العربي. انطلقت المنصة من السودان، وتستخدم أحدث تقنيات الذكاء الاصطناعي (مثل Gemini و DeepL) لتقديم ترجمات دقيقة وسريعة، مع الحفاظ على تنسيق الملفات الأصلية. نؤمن بأن المعرفة لا تحدها حدود، ونسعى لجعل المحتوى العلمي متاحاً للجميع بأسهل طريقة.</p><br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a></div></body></html>
 """
 
 CONTACT_PAGE = """
-<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>اتصل بنا</title><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:40px;text-align:center;} .container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);} h1{color:#5b5bd6;} p{line-height:1.8;font-size:16px;text-align:right;}</style></head><body><div class="container"><h1>اتصل بنا</h1><p>هل لديك سؤال، اقتراح، أو واجهت مشكلة أثناء استخدام المنصة؟ يسعدنا تواصلك معنا.</p><p style="text-align:center;font-size:18px;margin:20px 0;"><strong>البريد الإلكتروني:</strong> <a href="mailto:Abureyan810@gmail.com" style="color:#5b5bd6;">Abureyan810@gmail.com</a></p><p style="text-align:center;font-size:18px;margin:20px 0;"><strong>واتساب:</strong> <a href="https://wa.me/249925284869" style="color:#5b5bd6;" target="_blank">اضغط هنا</a></p><p style="text-align:center;font-size:18px;"><strong>اتصال هاتفي:</strong> <a href="tel:+249925284869" style="color:#5b5bd6;">+249925284869</a></p><br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a></div></body></html>
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>اتصل بنا | الريان للترجمة</title><meta name="description" content="تواصل مع فريق الريان للترجمة عبر البريد الإلكتروني أو الواتساب لأي استفسار أو اقتراح."><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:40px;text-align:center;} .container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);} h1{color:#5b5bd6;} p{line-height:1.8;font-size:16px;text-align:right;}</style></head><body><div class="container"><h1>اتصل بنا</h1><p>هل لديك سؤال، اقتراح، أو واجهت مشكلة أثناء استخدام المنصة؟ يسعدنا تواصلك معنا.</p><p style="text-align:center;font-size:18px;margin:20px 0;"><strong>البريد الإلكتروني:</strong> <a href="mailto:Abureyan810@gmail.com" style="color:#5b5bd6;">Abureyan810@gmail.com</a></p><p style="text-align:center;font-size:18px;margin:20px 0;"><strong>واتساب:</strong> <a href="https://wa.me/249925284869" style="color:#5b5bd6;" target="_blank">اضغط هنا</a></p><p style="text-align:center;font-size:18px;"><strong>اتصال هاتفي:</strong> <a href="tel:+249925284869" style="color:#5b5bd6;">+249925284869</a></p><br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a></div></body></html>
 """
 
 PRIVACY_PAGE = """
-<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>سياسة الخصوصية</title><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:40px;text-align:center;} .container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);} h1{color:#5b5bd6;} p,li{line-height:1.8;font-size:16px;text-align:right;}</style></head><body><div class="container"><h1>سياسة الخصوصية</h1><p>نحن في الريان للترجمة نحترم خصوصيتك. نوضح هنا كيفية تعاملنا مع بياناتك:</p><ul style="text-align:right;line-height:1.8;"><li><strong>الملفات المرفوعة:</strong> يتم معالجة الملفات مؤقتاً في الذاكرة، ولا نقوم بتخزينها أو مشاركتها مع أي طرف ثالث.</li><li><strong>ملفات تعريف الارتباط (Cookies):</strong> قد نستخدم ملفات تعريف الارتباط لتحسين تجربتك، ولعرض إعلانات مناسبة (إذا تم تفعيل الإعلانات لاحقاً).</li><li><strong>خدمات الطرف الثالث:</strong> نستخدم واجهات برمجة تطبيقات (APIs) من Google و DeepL للترجمة.</li><li><strong>لا نبيع بياناتك:</strong> نحن لا نبيع أو نشارك بياناتك الشخصية مع أي جهة خارجية.</li></ul><br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a></div></body></html>
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>سياسة الخصوصية | الريان للترجمة</title><meta name="description" content="سياسة الخصوصية لمنصة الريان للترجمة: كيف نتعامل مع ملفاتك وبياناتك."><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:40px;text-align:center;} .container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);} h1{color:#5b5bd6;} p,li{line-height:1.8;font-size:16px;text-align:right;}</style></head><body><div class="container"><h1>سياسة الخصوصية</h1><p>نحن في الريان للترجمة نحترم خصوصيتك. نوضح هنا كيفية تعاملنا مع بياناتك:</p><ul style="text-align:right;line-height:1.8;"><li><strong>الملفات المرفوعة:</strong> يتم معالجة الملفات مؤقتاً في الذاكرة، ولا نقوم بتخزينها أو مشاركتها مع أي طرف ثالث.</li><li><strong>ملفات تعريف الارتباط (Cookies):</strong> قد نستخدم ملفات تعريف الارتباط لتحسين تجربتك، ولعرض إعلانات مناسبة (إذا تم تفعيل الإعلانات لاحقاً).</li><li><strong>خدمات الطرف الثالث:</strong> نستخدم واجهات برمجة تطبيقات (APIs) من Google و DeepL للترجمة.</li><li><strong>لا نبيع بياناتك:</strong> نحن لا نبيع أو نشارك بياناتك الشخصية مع أي جهة خارجية.</li></ul><br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a></div></body></html>
 """
 
 TERMS_PAGE = """
-<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>شروط الاستخدام</title><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:40px;text-align:center;} .container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);} h1{color:#5b5bd6;} p,li{line-height:1.8;font-size:16px;text-align:right;}</style></head><body><div class="container"><h1>شروط الاستخدام</h1><p>باستخدامك للمنصة، فإنك توافق على:</p><ul style="text-align:right;line-height:1.8;"><li>عدم استخدام المنصة لترجمة محتوى غير قانوني أو مسيء.</li><li>أنت المسؤول الوحيد عن المحتوى الذي ترفعه.</li><li>نحن غير مسؤولين عن أي أخطاء في الترجمة قد تنتج عن استخدام التقنيات الآلية.</li></ul><br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a></div></body></html>
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>شروط الاستخدام | الريان للترجمة</title><meta name="description" content="شروط استخدام منصة الريان للترجمة."><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:40px;text-align:center;} .container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);} h1{color:#5b5bd6;} p,li{line-height:1.8;font-size:16px;text-align:right;}</style></head><body><div class="container"><h1>شروط الاستخدام</h1><p>باستخدامك للمنصة، فإنك توافق على:</p><ul style="text-align:right;line-height:1.8;"><li>عدم استخدام المنصة لترجمة محتوى غير قانوني أو مسيء.</li><li>أنت المسؤول الوحيد عن المحتوى الذي ترفعه.</li><li>نحن غير مسؤولين عن أي أخطاء في الترجمة قد تنتج عن استخدام التقنيات الآلية.</li></ul><br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a></div></body></html>
 """
 
 FAQ_PAGE = """
-<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>الأسئلة الشائعة</title><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:40px;text-align:center;} .container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);} h1{color:#5b5bd6;} p{line-height:1.8;font-size:16px;text-align:right;} strong{color:#5b5bd6;}</style></head><body><div class="container"><h1>الأسئلة الشائعة</h1><p><strong>هل الخدمة مجانية؟</strong><br>نعم، الخدمة مجانية بالكامل.</p><p><strong>هل تحفظون ملفاتي؟</strong><br>لا، يتم حذف الملفات فور إتمام الترجمة.</p><p><strong>لماذا تظهر المربعات في ملفات PDF؟</strong><br>لأننا نستخدم خطاً عربياً مضمناً، وقد يحتاج المتصفح للتحديث. جرب فتح الملف في برنامج آخر.</p><p><strong>هل يمكنني ترجمة ملفات كبيرة؟</strong><br>نعم، بحد أقصى 100 صفحة/شريحة لكل ملف.</p><br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a></div></body></html>
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>الأسئلة الشائعة | الريان للترجمة</title><meta name="description" content="الأسئلة الشائعة حول منصة الريان للترجمة: هل الخدمة مجانية؟ هل تحفظون الملفات؟"><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:40px;text-align:center;} .container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);} h1{color:#5b5bd6;} p{line-height:1.8;font-size:16px;text-align:right;} strong{color:#5b5bd6;}</style></head><body><div class="container"><h1>الأسئلة الشائعة</h1><p><strong>هل الخدمة مجانية؟</strong><br>نعم، الخدمة مجانية بالكامل.</p><p><strong>هل تحفظون ملفاتي؟</strong><br>لا، يتم حذف الملفات فور إتمام الترجمة.</p><p><strong>لماذا تظهر المربعات في ملفات PDF؟</strong><br>لأننا نستخدم خطاً عربياً مضمناً، وقد يحتاج المتصفح للتحديث. جرب فتح الملف في برنامج آخر.</p><p><strong>هل يمكنني ترجمة ملفات كبيرة؟</strong><br>نعم، بحد أقصى 100 صفحة/شريحة لكل ملف.</p><br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a></div></body></html>
 """
 
 @app.route('/')
 def home():
     increment_stat('visitors')
     return render_template_string(HTML_PAGE)
+
+@app.route('/sitemap.xml')
+def sitemap():
+    return app.response_class(SITEMAP_XML, mimetype='application/xml')
+
+@app.route('/robots.txt')
+def robots():
+    return app.response_class(ROBOTS_TXT, mimetype='text/plain')
 
 @app.route('/upload', methods=['POST'])
 @rate_limit
