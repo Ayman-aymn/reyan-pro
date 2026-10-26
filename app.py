@@ -33,6 +33,7 @@ LOGIN_BLOCK_TIME = 900
 MODELS_TO_TRY = ['gemini-3.5-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite-preview', 'gemini-3-flash-preview']
 WHATSAPP_NUMBER = '249925284869'
 PHONE_NUMBER = '+249925284869'
+WHATSAPP_CHANNEL = 'https://whatsapp.com/channel/0029VbDbf1V9MF8xMszlN61S'
 SITE_URL = 'https://reyan-pro.onrender.com'
 
 login_attempts = defaultdict(lambda: {'count': 0, 'blocked_until': 0})
@@ -323,7 +324,7 @@ def process_pdf(job_id, data, translate_images=False):
     except Exception as e:
         JOBS[job_id]['status'] = f'error: {str(e)[:100]}'
 
-# ===== SEO: sitemap.xml =====
+# ===== SEO =====
 SITEMAP_XML = f"""<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>{SITE_URL}/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>
@@ -332,9 +333,10 @@ SITEMAP_XML = f"""<?xml version="1.0" encoding="UTF-8"?>
   <url><loc>{SITE_URL}/privacy</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
   <url><loc>{SITE_URL}/terms</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
   <url><loc>{SITE_URL}/faq</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>{SITE_URL}/feedback</loc><changefreq>daily</changefreq><priority>0.8</priority></url>
+  <url><loc>{SITE_URL}/community</loc><changefreq>daily</changefreq><priority>0.9</priority></url>
 </urlset>"""
 
-# ===== SEO: robots.txt =====
 ROBOTS_TXT = f"""User-agent: *
 Allow: /
 Sitemap: {SITE_URL}/sitemap.xml
@@ -350,6 +352,7 @@ HTML_PAGE = """
 <title>الريان للترجمة | ترجمة ملفات PDF و PPTX</title>
 <meta name="description" content="منصة الريان للترجمة: ترجمة ملفات PDF و PPTX والنصوص من الإنجليزية إلى العربية مجاناً. ترجمة دقيقة وسريعة مع الحفاظ على التنسيق.">
 <meta name="keywords" content="ترجمة, ترجمة ملفات, ترجمة PDF, ترجمة PPTX, الريان للترجمة">
+<link rel="icon" href="/static/favicon.jpg" type="image/jpeg">
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box;font-family:'Tajawal',sans-serif}
@@ -422,6 +425,15 @@ body{min-height:100vh;background:linear-gradient(135deg, #eef2ff 0%, #c7b8ff 100
       <button onclick="goChat()" style="background:#8b5cf6;color:white;border:none;padding:10px 20px;border-radius:10px;cursor:pointer;">إرسال</button>
     </div>
   </div>
+
+  <div class="card" style="display:flex;gap:10px;">
+    <a href="/feedback" style="flex:1;text-decoration:none;">
+      <button class="btn" style="background:linear-gradient(135deg,#f59e0b,#d97706);margin:0;">💬 تعليقات واقتراحات</button>
+    </a>
+    <a href="/community" style="flex:1;text-decoration:none;">
+      <button class="btn" style="background:linear-gradient(135deg,#10b981,#059669);margin:0;">🌐 مجتمع الريان</button>
+    </a>
+  </div>
 </div>
 <div class="footer">
     <a href="/about">من نحن</a> | 
@@ -429,7 +441,8 @@ body{min-height:100vh;background:linear-gradient(135deg, #eef2ff 0%, #c7b8ff 100
     <a href="/privacy">سياسة الخصوصية</a> | 
     <a href="/terms">شروط الاستخدام</a> | 
     <a href="/faq">الأسئلة الشائعة</a>
-    <p style="margin-top:10px;">© 2026 الريان للترجمة. جميع الحقوق محفوظة.</p>
+    <p style="margin-top:10px;">تابعنا على <a href="{{WHATSAPP_CHANNEL}}" target="_blank" style="color:#25D366;font-weight:bold;">قناة الواتساب</a></p>
+    <p style="margin-top:5px;">© 2026 الريان للترجمة. جميع الحقوق محفوظة.</p>
 </div>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
@@ -526,29 +539,118 @@ async function quickTranslate() {
 
 # ===== الصفحات =====
 ABOUT_PAGE = """
-<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>من نحن | الريان للترجمة</title><meta name="description" content="تعرف على منصة الريان للترجمة، أهدافها، وكيف تساعد الطلاب والباحثين في ترجمة الملفات."><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:40px;text-align:center;} .container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);} h1{color:#5b5bd6;} p{line-height:1.8;font-size:16px;text-align:right;}</style></head><body><div class="container"><h1>من نحن</h1><p>الريان للترجمة هي منصة رقمية مجانية تهدف إلى تسهيل ترجمة الملفات الأكاديمية (PDF و PPTX) للطلاب والباحثين في العالم العربي. انطلقت المنصة من السودان، وتستخدم أحدث تقنيات الذكاء الاصطناعي (مثل Gemini و DeepL) لتقديم ترجمات دقيقة وسريعة، مع الحفاظ على تنسيق الملفات الأصلية. نؤمن بأن المعرفة لا تحدها حدود، ونسعى لجعل المحتوى العلمي متاحاً للجميع بأسهل طريقة.</p><br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a></div></body></html>
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>من نحن | الريان للترجمة</title><meta name="description" content="تعرف على منصة الريان للترجمة، أهدافها، وكيف تساعد الطلاب والباحثين في ترجمة الملفات."><link rel="icon" href="/static/favicon.jpg" type="image/jpeg"><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:40px;text-align:center;} .container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);} h1{color:#5b5bd6;} p{line-height:1.8;font-size:16px;text-align:right;}</style></head><body><div class="container"><h1>من نحن</h1><p>الريان للترجمة هي منصة رقمية مجانية تهدف إلى تسهيل ترجمة الملفات الأكاديمية (PDF و PPTX) للطلاب والباحثين في العالم العربي. انطلقت المنصة من السودان، وتستخدم أحدث تقنيات الذكاء الاصطناعي (مثل Gemini و DeepL) لتقديم ترجمات دقيقة وسريعة، مع الحفاظ على تنسيق الملفات الأصلية. نؤمن بأن المعرفة لا تحدها حدود، ونسعى لجعل المحتوى العلمي متاحاً للجميع بأسهل طريقة.</p><br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a></div></body></html>
 """
 
 CONTACT_PAGE = """
-<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>اتصل بنا | الريان للترجمة</title><meta name="description" content="تواصل مع فريق الريان للترجمة عبر البريد الإلكتروني أو الواتساب لأي استفسار أو اقتراح."><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:40px;text-align:center;} .container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);} h1{color:#5b5bd6;} p{line-height:1.8;font-size:16px;text-align:right;}</style></head><body><div class="container"><h1>اتصل بنا</h1><p>هل لديك سؤال، اقتراح، أو واجهت مشكلة أثناء استخدام المنصة؟ يسعدنا تواصلك معنا.</p><p style="text-align:center;font-size:18px;margin:20px 0;"><strong>البريد الإلكتروني:</strong> <a href="mailto:Abureyan810@gmail.com" style="color:#5b5bd6;">Abureyan810@gmail.com</a></p><p style="text-align:center;font-size:18px;margin:20px 0;"><strong>واتساب:</strong> <a href="https://wa.me/249925284869" style="color:#5b5bd6;" target="_blank">اضغط هنا</a></p><p style="text-align:center;font-size:18px;"><strong>اتصال هاتفي:</strong> <a href="tel:+249925284869" style="color:#5b5bd6;">+249925284869</a></p><br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a></div></body></html>
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>اتصل بنا | الريان للترجمة</title><meta name="description" content="تواصل مع فريق الريان للترجمة عبر البريد الإلكتروني أو الواتساب لأي استفسار أو اقتراح."><link rel="icon" href="/static/favicon.jpg" type="image/jpeg"><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:40px;text-align:center;} .container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);} h1{color:#5b5bd6;} p{line-height:1.8;font-size:16px;text-align:right;}</style></head><body><div class="container"><h1>اتصل بنا</h1><p>هل لديك سؤال، اقتراح، أو واجهت مشكلة أثناء استخدام المنصة؟ يسعدنا تواصلك معنا.</p><p style="text-align:center;font-size:18px;margin:20px 0;"><strong>البريد الإلكتروني:</strong> <a href="mailto:Abureyan810@gmail.com" style="color:#5b5bd6;">Abureyan810@gmail.com</a></p><p style="text-align:center;font-size:18px;margin:20px 0;"><strong>واتساب:</strong> <a href="https://wa.me/249925284869" style="color:#5b5bd6;" target="_blank">اضغط هنا</a></p><p style="text-align:center;font-size:18px;"><strong>اتصال هاتفي:</strong> <a href="tel:+249925284869" style="color:#5b5bd6;">+249925284869</a></p><br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a></div></body></html>
 """
 
 PRIVACY_PAGE = """
-<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>سياسة الخصوصية | الريان للترجمة</title><meta name="description" content="سياسة الخصوصية لمنصة الريان للترجمة: كيف نتعامل مع ملفاتك وبياناتك."><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:40px;text-align:center;} .container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);} h1{color:#5b5bd6;} p,li{line-height:1.8;font-size:16px;text-align:right;}</style></head><body><div class="container"><h1>سياسة الخصوصية</h1><p>نحن في الريان للترجمة نحترم خصوصيتك. نوضح هنا كيفية تعاملنا مع بياناتك:</p><ul style="text-align:right;line-height:1.8;"><li><strong>الملفات المرفوعة:</strong> يتم معالجة الملفات مؤقتاً في الذاكرة، ولا نقوم بتخزينها أو مشاركتها مع أي طرف ثالث.</li><li><strong>ملفات تعريف الارتباط (Cookies):</strong> قد نستخدم ملفات تعريف الارتباط لتحسين تجربتك، ولعرض إعلانات مناسبة (إذا تم تفعيل الإعلانات لاحقاً).</li><li><strong>خدمات الطرف الثالث:</strong> نستخدم واجهات برمجة تطبيقات (APIs) من Google و DeepL للترجمة.</li><li><strong>لا نبيع بياناتك:</strong> نحن لا نبيع أو نشارك بياناتك الشخصية مع أي جهة خارجية.</li></ul><br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a></div></body></html>
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>سياسة الخصوصية | الريان للترجمة</title><meta name="description" content="سياسة الخصوصية لمنصة الريان للترجمة: كيف نتعامل مع ملفاتك وبياناتك."><link rel="icon" href="/static/favicon.jpg" type="image/jpeg"><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:40px;text-align:center;} .container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);} h1{color:#5b5bd6;} p,li{line-height:1.8;font-size:16px;text-align:right;}</style></head><body><div class="container"><h1>سياسة الخصوصية</h1><p>نحن في الريان للترجمة نحترم خصوصيتك. نوضح هنا كيفية تعاملنا مع بياناتك:</p><ul style="text-align:right;line-height:1.8;"><li><strong>الملفات المرفوعة:</strong> يتم معالجة الملفات مؤقتاً في الذاكرة، ولا نقوم بتخزينها أو مشاركتها مع أي طرف ثالث.</li><li><strong>ملفات تعريف الارتباط (Cookies):</strong> قد نستخدم ملفات تعريف الارتباط لتحسين تجربتك، ولعرض إعلانات مناسبة (إذا تم تفعيل الإعلانات لاحقاً).</li><li><strong>خدمات الطرف الثالث:</strong> نستخدم واجهات برمجة تطبيقات (APIs) من Google و DeepL للترجمة.</li><li><strong>لا نبيع بياناتك:</strong> نحن لا نبيع أو نشارك بياناتك الشخصية مع أي جهة خارجية.</li></ul><br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a></div></body></html>
 """
 
 TERMS_PAGE = """
-<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>شروط الاستخدام | الريان للترجمة</title><meta name="description" content="شروط استخدام منصة الريان للترجمة."><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:40px;text-align:center;} .container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);} h1{color:#5b5bd6;} p,li{line-height:1.8;font-size:16px;text-align:right;}</style></head><body><div class="container"><h1>شروط الاستخدام</h1><p>باستخدامك للمنصة، فإنك توافق على:</p><ul style="text-align:right;line-height:1.8;"><li>عدم استخدام المنصة لترجمة محتوى غير قانوني أو مسيء.</li><li>أنت المسؤول الوحيد عن المحتوى الذي ترفعه.</li><li>نحن غير مسؤولين عن أي أخطاء في الترجمة قد تنتج عن استخدام التقنيات الآلية.</li></ul><br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a></div></body></html>
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>شروط الاستخدام | الريان للترجمة</title><meta name="description" content="شروط استخدام منصة الريان للترجمة."><link rel="icon" href="/static/favicon.jpg" type="image/jpeg"><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:40px;text-align:center;} .container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);} h1{color:#5b5bd6;} p,li{line-height:1.8;font-size:16px;text-align:right;}</style></head><body><div class="container"><h1>شروط الاستخدام</h1><p>باستخدامك للمنصة، فإنك توافق على:</p><ul style="text-align:right;line-height:1.8;"><li>عدم استخدام المنصة لترجمة محتوى غير قانوني أو مسيء.</li><li>أنت المسؤول الوحيد عن المحتوى الذي ترفعه.</li><li>نحن غير مسؤولين عن أي أخطاء في الترجمة قد تنتج عن استخدام التقنيات الآلية.</li></ul><br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a></div></body></html>
 """
 
 FAQ_PAGE = """
-<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>الأسئلة الشائعة | الريان للترجمة</title><meta name="description" content="الأسئلة الشائعة حول منصة الريان للترجمة: هل الخدمة مجانية؟ هل تحفظون الملفات؟"><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:40px;text-align:center;} .container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);} h1{color:#5b5bd6;} p{line-height:1.8;font-size:16px;text-align:right;} strong{color:#5b5bd6;}</style></head><body><div class="container"><h1>الأسئلة الشائعة</h1><p><strong>هل الخدمة مجانية؟</strong><br>نعم، الخدمة مجانية بالكامل.</p><p><strong>هل تحفظون ملفاتي؟</strong><br>لا، يتم حذف الملفات فور إتمام الترجمة.</p><p><strong>لماذا تظهر المربعات في ملفات PDF؟</strong><br>لأننا نستخدم خطاً عربياً مضمناً، وقد يحتاج المتصفح للتحديث. جرب فتح الملف في برنامج آخر.</p><p><strong>هل يمكنني ترجمة ملفات كبيرة؟</strong><br>نعم، بحد أقصى 100 صفحة/شريحة لكل ملف.</p><br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a></div></body></html>
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>الأسئلة الشائعة | الريان للترجمة</title><meta name="description" content="الأسئلة الشائعة حول منصة الريان للترجمة: هل الخدمة مجانية؟ هل تحفظون الملفات؟"><link rel="icon" href="/static/favicon.jpg" type="image/jpeg"><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:40px;text-align:center;} .container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);} h1{color:#5b5bd6;} p{line-height:1.8;font-size:16px;text-align:right;} strong{color:#5b5bd6;}</style></head><body><div class="container"><h1>الأسئلة الشائعة</h1><p><strong>هل الخدمة مجانية؟</strong><br>نعم، الخدمة مجانية بالكامل.</p><p><strong>هل تحفظون ملفاتي؟</strong><br>لا، يتم حذف الملفات فور إتمام الترجمة.</p><p><strong>لماذا تظهر المربعات في ملفات PDF؟</strong><br>لأننا نستخدم خطاً عربياً مضمناً، وقد يحتاج المتصفح للتحديث. جرب فتح الملف في برنامج آخر.</p><p><strong>هل يمكنني ترجمة ملفات كبيرة؟</strong><br>نعم، بحد أقصى 100 صفحة/شريحة لكل ملف.</p><br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a></div></body></html>
 """
 
+# ===== صفحة التعليقات =====
+FEEDBACK_PAGE = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>التعليقات والاقتراحات | الريان للترجمة</title>
+<meta name="description" content="شاركنا رأيك واقتراحاتك حول منصة الريان للترجمة.">
+<link rel="icon" href="/static/favicon.jpg" type="image/jpeg">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+<style>
+body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:20px;text-align:center;}
+.container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);}
+h1{color:#5b5bd6;margin-bottom:20px;}
+input,textarea{width:100%;padding:10px;margin-bottom:10px;border:1px solid #ddd;border-radius:10px;font-family:inherit;box-sizing:border-box;}
+textarea{height:100px;resize:none;}
+button{background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none;padding:12px 20px;border-radius:10px;cursor:pointer;font-weight:bold;width:100%;}
+.comment{background:#f8f9fa;border-radius:10px;padding:15px;margin-bottom:10px;text-align:right;}
+.comment strong{color:#5b5bd6;}
+.comment small{color:#888;font-size:12px;}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>💬 التعليقات والاقتراحات</h1>
+<form action="/submit_feedback" method="POST">
+<input type="text" name="name" placeholder="اسمك (اختياري)" maxlength="50">
+<textarea name="message" placeholder="اكتب تعليقك أو اقتراحك هنا..." required maxlength="500"></textarea>
+<button type="submit">إرسال</button>
+</form>
+<hr style="margin:20px 0;border:1px solid #eee;">
+<h2 style="color:#5b5bd6;margin-bottom:15px;">آخر التعليقات</h2>
+<div id="comments_list">
+{{COMMENTS}}
+</div>
+<br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a>
+</div>
+</body>
+</html>
+"""
+
+# ===== صفحة المجتمع =====
+COMMUNITY_PAGE = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>مجتمع الريان | الريان للترجمة</title>
+<meta name="description" content="مجتمع الريان الأكاديمي: تواصل مع طلاب من جامعتك، واطلب المساعدة.">
+<link rel="icon" href="/static/favicon.jpg" type="image/jpeg">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+<style>
+body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:20px;text-align:center;}
+.container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);}
+h1{color:#5b5bd6;margin-bottom:20px;}
+input,textarea{width:100%;padding:10px;margin-bottom:10px;border:1px solid #ddd;border-radius:10px;font-family:inherit;box-sizing:border-box;}
+textarea{height:80px;resize:none;}
+button{background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;padding:12px 20px;border-radius:10px;cursor:pointer;font-weight:bold;width:100%;}
+.post{background:#f8f9fa;border-radius:10px;padding:15px;margin-bottom:10px;text-align:right;border-left:4px solid #10b981;}
+.post strong{color:#5b5bd6;}
+.post small{color:#888;font-size:12px;}
+.post .whatsapp-btn{display:inline-block;background:#25D366;color:white;padding:8px 15px;border-radius:8px;text-decoration:none;margin-top:8px;font-size:14px;}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>🌐 مجتمع الريان</h1>
+<p style="margin-bottom:20px;">تواصل مع طلاب من جامعتك، واطلب المساعدة.</p>
+<form action="/submit_post" method="POST">
+<input type="text" name="name" placeholder="اسمك" required maxlength="50">
+<input type="text" name="university" placeholder="جامعتك (مثال: جامعة أم درمان الإسلامية)" required maxlength="100">
+<textarea name="message" placeholder="اكتب طلبك أو سؤالك هنا..." required maxlength="500"></textarea>
+<input type="text" name="whatsapp" placeholder="رقم واتساب (اختياري - للتواصل)" maxlength="20">
+<button type="submit">نشر</button>
+</form>
+<hr style="margin:20px 0;border:1px solid #eee;">
+<h2 style="color:#5b5bd6;margin-bottom:15px;">آخر المنشورات</h2>
+<div id="posts_list">
+{{POSTS}}
+</div>
+<br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a>
+</div>
+</body>
+</html>
+"""
+
+# ===== المسارات =====
 @app.route('/')
 def home():
     increment_stat('visitors')
-    return render_template_string(HTML_PAGE)
+    return render_template_string(HTML_PAGE, WHATSAPP_CHANNEL=WHATSAPP_CHANNEL)
 
 @app.route('/sitemap.xml')
 def sitemap():
@@ -680,18 +782,62 @@ def chat_file():
     except Exception as e:
         return jsonify({'error': f'خطأ تقني: {str(e)[:100]}'})
 
-@app.route('/admin-dashboard-secret')
-def admin_dashboard():
-    auth = request.authorization
-    if not auth or not check_auth(auth.username, auth.password): return authenticate()
-    visitors = 0; translated = 0; downloads = 0
+@app.route('/feedback')
+def feedback():
+    comments = ""
     if supabase:
         try:
-            res = supabase.table('stats').select('*').eq('id', 1).execute()
+            res = supabase.table('feedback').select('*').order('created_at', desc=True).limit(20).execute()
             if res.data:
-                visitors = res.data[0].get('visitors', 0); translated = res.data[0].get('translated_files', 0); downloads = res.data[0].get('downloads', 0)
+                for c in res.data:
+                    comments += f"<div class='comment'><strong>{c['name']}</strong><br>{c['message']}<br><small>{c['created_at'][:16]}</small></div>"
+            else:
+                comments = "<p style='color:#888;'>لا توجد تعليقات بعد. كن أول من يشارك رأيه!</p>"
         except: pass
-    return f"<html dir='rtl'><body style='background:#1a1a2e;color:#fff;text-align:center;padding:40px;'><h1>📊 إحصائيات الريان</h1><div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>👁️ الزوار<br><h2 style='color:#d4af37'>{visitors}</h2></div><div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>📄 الملفات<br><h2 style='color:#d4af37'>{translated}</h2></div><div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>📥 التحميلات<br><h2 style='color:#d4af37'>{downloads}</h2></div></body></html>"
+    if not comments: comments = "<p style='color:#888;'>لا توجد تعليقات بعد. كن أول من يشارك رأيه!</p>"
+    return render_template_string(FEEDBACK_PAGE, COMMENTS=comments)
+
+@app.route('/submit_feedback', methods=['POST'])
+def submit_feedback():
+    name = request.form.get('name', 'زائر') or 'زائر'
+    message = request.form.get('message', '')
+    if supabase and message:
+        try:
+            supabase.table('feedback').insert({'name': name[:50], 'message': message[:500]}).execute()
+        except: pass
+    return redirect('/feedback')
+
+@app.route('/community')
+def community():
+    posts = ""
+    if supabase:
+        try:
+            res = supabase.table('community_posts').select('*').order('created_at', desc=True).limit(20).execute()
+            if res.data:
+                for p in res.data:
+                    whatsapp_btn = ""
+                    if p.get('whatsapp'):
+                        whatsapp_btn = f"<a href='https://wa.me/{p['whatsapp']}' class='whatsapp-btn' target='_blank'>📱 تواصل عبر واتساب</a>"
+                    posts += f"<div class='post'><strong>{p['name']}</strong> <small>({p['university']})</small><br>{p['message']}<br>{whatsapp_btn}<br><small>{p['created_at'][:16]}</small></div>"
+            else:
+                posts = "<p style='color:#888;'>لا توجد منشورات بعد. كن أول من ينشر!</p>"
+        except: pass
+    if not posts: posts = "<p style='color:#888;'>لا توجد منشورات بعد. كن أول من ينشر!</p>"
+    return render_template_string(COMMUNITY_PAGE, POSTS=posts)
+
+@app.route('/submit_post', methods=['POST'])
+def submit_post():
+    name = request.form.get('name', '')
+    university = request.form.get('university', '')
+    message = request.form.get('message', '')
+    whatsapp = request.form.get('whatsapp', '')
+    if supabase and name and university and message:
+        try:
+            supabase.table('community_posts').insert({
+                'name': name[:50], 'university': university[:100], 'message': message[:500], 'whatsapp': whatsapp[:20]
+            }).execute()
+        except: pass
+    return redirect('/community')
 
 @app.route('/about')
 def about():
@@ -713,10 +859,18 @@ def terms():
 def faq():
     return render_template_string(FAQ_PAGE)
 
-
-@app.route('/google51a1ddf540356a1f.html')
-def google_verify():
-    return send_from_directory('.', 'google51a1ddf540356a1f.html')
+@app.route('/admin-dashboard-secret')
+def admin_dashboard():
+    auth = request.authorization
+    if not auth or not check_auth(auth.username, auth.password): return authenticate()
+    visitors = 0; translated = 0; downloads = 0
+    if supabase:
+        try:
+            res = supabase.table('stats').select('*').eq('id', 1).execute()
+            if res.data:
+                visitors = res.data[0].get('visitors', 0); translated = res.data[0].get('translated_files', 0); downloads = res.data[0].get('downloads', 0)
+        except: pass
+    return f"<html dir='rtl'><body style='background:#1a1a2e;color:#fff;text-align:center;padding:40px;'><h1>📊 إحصائيات الريان</h1><div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>👁️ الزوار<br><h2 style='color:#d4af37'>{visitors}</h2></div><div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>📄 الملفات<br><h2 style='color:#d4af37'>{translated}</h2></div><div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>📥 التحميلات<br><h2 style='color:#d4af37'>{downloads}</h2></div></body></html>"
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
