@@ -713,6 +713,11 @@ def terms():
 def faq():
     return render_template_string(FAQ_PAGE)
 
+
+@app.route('/google51a1ddf540356a1f.html')
+def google_verify():
+    return send_from_directory('.', 'google51a1ddf540356a1f.html')
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
