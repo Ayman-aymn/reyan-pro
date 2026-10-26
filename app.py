@@ -31,6 +31,8 @@ CHAT_COOLDOWN = 2
 MAX_LOGIN_ATTEMPTS = 3
 LOGIN_BLOCK_TIME = 900
 MODELS_TO_TRY = ['gemini-3.5-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite-preview', 'gemini-3-flash-preview']
+WHATSAPP_NUMBER = '249925284869'
+PHONE_NUMBER = '+249925284869'
 
 login_attempts = defaultdict(lambda: {'count': 0, 'blocked_until': 0})
 last_chat_time = defaultdict(float)
@@ -66,15 +68,16 @@ def authenticate():
 
 DEEPL_KEY = os.environ.get('DEEPL_API_KEY')
 GEMINI_KEY = os.environ.get('GEMINI_API_KEY')
-SUPABASE_URL = 'https://lmgshabrtmvbnpdhkkst.supabase.co'
-SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtZ3NoYWJydG12Ym5wZGhra3N0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjYxNzgyMSwiZXhwIjoyMTA4MTkzODIxfQ.H8-yzWt9XlQEpKFfzSJxXey48u222UGcl5NuvCtATcA'
+SUPABASE_URL = os.environ.get('SUPABASE_URL')
+SUPABASE_SERVICE_KEY = os.environ.get('SUPABASE_SERVICE_KEY')
 
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
 
 supabase = None
-try: supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-except: pass
+if SUPABASE_URL and SUPABASE_SERVICE_KEY:
+    try: supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    except: pass
 
 def increment_stat(field):
     if not supabase: return
@@ -164,7 +167,7 @@ def translate_image_with_gemini(image_bytes):
     except: pass
     return None
 
-# ===== PPTX: ترجمة النصوص والصور معاً + خيار تحويل إلى PDF =====
+# ===== PPTX =====
 def process_pptx(job_id, data, translate_images=False, to_pdf=False):
     try:
         prs = Presentation(io.BytesIO(data))
@@ -172,7 +175,6 @@ def process_pptx(job_id, data, translate_images=False, to_pdf=False):
         if total > MAX_PAGES: JOBS[job_id]['status'] = 'error: الحد الأقصى 100 شريحة'; return
         
         if to_pdf:
-            # إنشاء ملف PDF جديد بالترتيب المطلوب (نص أصلي ثم ترجمة)
             out_bio = io.BytesIO()
             templ = SimpleDocTemplate(out_bio, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
             s_en = ParagraphStyle('en', fontName='Helvetica', fontSize=12, leading=16)
@@ -182,31 +184,22 @@ def process_pptx(job_id, data, translate_images=False, to_pdf=False):
             for i, slide in enumerate(prs.slides):
                 story.append(Paragraph(f"--- شريحة {i+1} ---", s_en))
                 story.append(Spacer(1, 10))
-                
-                # جمع النصوص الإنجليزية من الشريحة
                 english_texts = []
                 for shape in slide.shapes:
                     if shape.has_text_frame and shape.text.strip():
                         orig = shape.text.strip()
-                        if len(orig) > 1:
-                            english_texts.append(orig)
+                        if len(orig) > 1: english_texts.append(orig)
                 
                 if english_texts:
-                    # كتابة النص الإنجليزي كاملاً
                     for eng in english_texts:
                         story.append(Paragraph(eng, s_en))
                         story.append(Spacer(1, 5))
-                    
-                    # مسافة أمان
                     story.append(Spacer(1, 20))
-                    
-                    # ترجمة النصوص وكتابتها
                     translations = translate_batch(english_texts)
                     for tr in translations:
                         story.append(Paragraph(fix_ar(tr), s_ar))
                         story.append(Spacer(1, 10))
                 
-                # ترجمة الصور (اختياري)
                 if translate_images:
                     for shape in slide.shapes:
                         if shape.shape_type == 13:
@@ -217,7 +210,6 @@ def process_pptx(job_id, data, translate_images=False, to_pdf=False):
                                     story.append(Paragraph(f"[ترجمة الصورة]: {fix_ar(translated_text)}", s_ar))
                                     story.append(Spacer(1, 10))
                             except: pass
-                
                 story.append(Spacer(1, 30))
                 JOBS[job_id]['progress'] = int(((i+1)/total)*100)
                 JOBS[job_id]['stage'] = f'ترجمة الشريحة {i+1} من {total}'
@@ -229,7 +221,6 @@ def process_pptx(job_id, data, translate_images=False, to_pdf=False):
             JOBS[job_id]['progress'] = 100
             JOBS[job_id]['type'] = 'pdf'
         else:
-            # الترجمة العادية داخل PPTX (كما كان)
             for i, slide in enumerate(prs.slides):
                 for shape in slide.shapes:
                     if shape.has_text_frame and shape.text.strip():
@@ -243,7 +234,6 @@ def process_pptx(job_id, data, translate_images=False, to_pdf=False):
                                 p.font.name = 'Arial'
                                 p.alignment = PP_ALIGN.RIGHT
                                 p.space_before = Pt(10)
-                
                 if translate_images:
                     for shape in slide.shapes:
                         if shape.shape_type == 13:
@@ -275,7 +265,6 @@ def process_pptx(job_id, data, translate_images=False, to_pdf=False):
                                     fill.solid()
                                     fill.fore_color.rgb = RGBColor(255, 255, 255)
                             except: pass
-                
                 JOBS[job_id]['progress'] = int(((i+1)/total)*100)
                 JOBS[job_id]['stage'] = f'ترجمة الشريحة {i+1} من {total}'
             
@@ -289,7 +278,7 @@ def process_pptx(job_id, data, translate_images=False, to_pdf=False):
     except Exception as e:
         JOBS[job_id]['status'] = f'error: {str(e)[:100]}'
 
-# ===== PDF: إنشاء ملف جديد =====
+# ===== PDF =====
 def process_pdf(job_id, data, translate_images=False):
     try:
         doc = fitz.open(stream=data, filetype="pdf")
@@ -312,7 +301,6 @@ def process_pdf(job_id, data, translate_images=False):
                         story.append(Paragraph(line, s_en))
                         story.append(Paragraph(fix_ar(tr), s_ar))
                         story.append(Spacer(1, 8))
-            
             if translate_images:
                 for img_index, img in enumerate(page.get_images(full=True)):
                     try:
@@ -324,7 +312,6 @@ def process_pdf(job_id, data, translate_images=False):
                             story.append(Paragraph(f"[ترجمة الصورة {img_index+1}]: {fix_ar(translated_text)}", s_ar))
                             story.append(Spacer(1, 8))
                     except: pass
-            
             JOBS[job_id]['progress'] = int(((i+1)/total)*100)
             JOBS[job_id]['stage'] = f'ترجمة الصفحة {i+1} من {total}'
         
@@ -346,7 +333,7 @@ HTML_PAGE = """
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box;font-family:'Tajawal',sans-serif}
-body{min-height:100vh;background:linear-gradient(135deg, #eef2ff 0%, #c7b8ff 100%);color:#2f365f;padding:20px;display:flex;justify-content:center;align-items:center}
+body{min-height:100vh;background:linear-gradient(135deg, #eef2ff 0%, #c7b8ff 100%);color:#2f365f;padding:20px;display:flex;flex-direction:column;justify-content:center;align-items:center}
 .app{max-width:440px;width:100%;padding:20px}
 .card{background:rgba(255,255,255,0.9);border-radius:20px;padding:20px;box-shadow:0 8px 20px rgba(120,130,220,0.1);text-align:center;margin-bottom:15px}
 .btn{width:100%;height:48px;border-radius:16px;border:none;background:linear-gradient(135deg,#7c8aff,#8b5cf6);color:#fff;font-weight:800;font-size:16px;cursor:pointer;margin-top:10px}
@@ -360,6 +347,8 @@ body{min-height:100vh;background:linear-gradient(135deg, #eef2ff 0%, #c7b8ff 100
 .quick-translate{display:flex;gap:5px;margin-top:10px}
 .quick-translate textarea{flex:1;padding:10px;border:1px solid #ddd;border-radius:10px;resize:none;height:60px;font-family:inherit}
 .quick-translate button{background:#d4af37;color:white;border:none;padding:10px 15px;border-radius:10px;cursor:pointer;font-weight:bold}
+.footer{max-width:440px;width:100%;padding:20px;text-align:center;font-size:14px;color:#6b6b9a}
+.footer a{color:#5b5bd6;text-decoration:none;margin:0 5px;}
 </style>
 </head>
 <body>
@@ -415,6 +404,14 @@ body{min-height:100vh;background:linear-gradient(135deg, #eef2ff 0%, #c7b8ff 100
       <button onclick="goChat()" style="background:#8b5cf6;color:white;border:none;padding:10px 20px;border-radius:10px;cursor:pointer;">إرسال</button>
     </div>
   </div>
+</div>
+<div class="footer">
+    <a href="/about">من نحن</a> | 
+    <a href="/contact">اتصل بنا</a> | 
+    <a href="/privacy">سياسة الخصوصية</a> | 
+    <a href="/terms">شروط الاستخدام</a> | 
+    <a href="/faq">الأسئلة الشائعة</a>
+    <p style="margin-top:10px;">© 2026 الريان للترجمة. جميع الحقوق محفوظة.</p>
 </div>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
@@ -509,134 +506,25 @@ async function quickTranslate() {
 </html>
 """
 
-# ===== صفحة المساعد =====
-CHAT_PAGE = """
-<!DOCTYPE html>
-<html dir="rtl">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>مساعد أيمن الذكي</title>
-<style>
-    body { font-family: sans-serif; background: #f0f2f5; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; }
-    .header { background: #5b5bd6; color: white; padding: 15px; text-align: center; font-weight: bold; font-size: 18px; }
-    .chat-container { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
-    .msg { max-width: 80%; padding: 12px 15px; border-radius: 15px; line-height: 1.6; font-size: 15px; word-wrap: break-word; position: relative; }
-    .msg.user { background: #5b5bd6; color: white; align-self: flex-start; border-bottom-left-radius: 0; }
-    .msg.ai { background: white; color: #333; align-self: flex-end; border-bottom-right-radius: 0; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-    .msg .copy-btn { position: absolute; top: 5px; left: 5px; background: #eee; border: none; border-radius: 5px; cursor: pointer; font-size: 10px; padding: 2px 5px; opacity: 0; transition: 0.3s; }
-    .msg:hover .copy-btn { opacity: 1; }
-    .input-area { background: white; padding: 10px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #ddd; }
-    .input-row { display: flex; gap: 10px; }
-    .input-area input[type="text"] { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 20px; outline: none; font-size: 15px; }
-    .input-area button { background: #5b5bd6; color: white; border: none; padding: 12px 20px; border-radius: 20px; cursor: pointer; font-weight: bold; }
-    .file-input-row { display: flex; gap: 10px; align-items: center; font-size: 12px; }
-    .file-input-row input[type="file"] { flex: 1; }
-    .file-input-row button { background: #d4af37; font-size: 12px; padding: 8px 15px; }
-    .clear-btn { background: #e74c3c; color: white; border: none; padding: 5px 15px; border-radius: 15px; cursor: pointer; font-size: 12px; margin-bottom: 10px; }
-</style>
-</head>
-<body>
-<div class="header">🧠 مساعد أيمن الذكي</div>
-<div class="chat-container" id="chatContainer"></div>
-<button class="clear-btn" onclick="clearChat()">مسح المحادثة</button>
-<div class="input-area">
-    <div class="input-row">
-        <input type="text" id="msgInput" maxlength="1000" placeholder="اكتب رسالتك هنا..." onkeypress="if(event.key==='Enter') sendMsg()">
-        <button onclick="sendMsg()">إرسال</button>
-    </div>
-    <div class="file-input-row">
-        <input type="file" id="fileInput" accept=".pdf,.pptx">
-        <button onclick="uploadFileAndAsk()" style="background:#8b5cf6;">تحليل الملف</button>
-    </div>
-</div>
-<script>
-let history = [];
-let lastSendTime = 0;
-function addMsg(sender, text) {
-    const c = document.getElementById('chatContainer');
-    const d = document.createElement('div');
-    d.className = 'msg ' + sender;
-    d.textContent = text;
-    if(sender === 'ai') {
-        const btn = document.createElement('button');
-        btn.className = 'copy-btn';
-        btn.textContent = 'نسخ';
-        btn.onclick = () => { navigator.clipboard.writeText(text); btn.textContent = 'تم!'; setTimeout(() => btn.textContent = 'نسخ', 2000); };
-        d.appendChild(btn);
-    }
-    c.appendChild(d);
-    c.scrollTop = c.scrollHeight;
-    return d;
-}
-async function sendMsg() {
-    const now = Date.now();
-    if(now - lastSendTime < 2000) { alert('الرجاء الانتظار ثانيتين'); return; }
-    const input = document.getElementById('msgInput');
-    const text = input.value.trim();
-    if(!text) return;
-    if(text.length > 1000) { alert('الرسالة طويلة'); return; }
-    if(history.length >= 44) { alert('انتهت المحادثة'); return; }
-    lastSendTime = now;
-    addMsg('user', text);
-    input.value = '';
-    const loadingDiv = addMsg('ai', 'جاري التفكير...');
-    
-    try {
-        const res = await fetch('/chat', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({message: text, history: history})
-        });
-        const data = await res.json();
-        if(data.reply) {
-            loadingDiv.textContent = data.reply;
-            history.push({role: 'user', parts: text});
-            history.push({role: 'model', parts: data.reply});
-        } else {
-            loadingDiv.textContent = '❌ ' + (data.error || 'خطأ');
-        }
-    } catch(e) {
-        loadingDiv.textContent = '❌ فشل الاتصال.';
-    }
-}
-async function uploadFileAndAsk() {
-    const file = document.getElementById('fileInput').files[0];
-    if(!file) { alert('اختر ملفاً أولاً'); return; }
-    const question = document.getElementById('msgInput').value.trim();
-    
-    addMsg('user', 'رفعت الملف: ' + file.name + (question ? ' | سؤالي: ' + question : ''));
-    const loadingDiv = addMsg('ai', 'جاري قراءة الملف والتفكير...');
-    
-    const fd = new FormData();
-    fd.append('file', file);
-    fd.append('question', question);
-    
-    try {
-        const res = await fetch('/chat_file', { method: 'POST', body: fd });
-        const data = await res.json();
-        if(data.reply) {
-            loadingDiv.textContent = data.reply;
-            history.push({role: 'user', parts: 'ملف: ' + file.name + ' | سؤال: ' + question});
-            history.push({role: 'model', parts: data.reply});
-        } else {
-            loadingDiv.textContent = '❌ ' + (data.error || 'خطأ');
-        }
-    } catch(e) {
-        loadingDiv.textContent = '❌ فشل الاتصال.';
-    }
-}
-function clearChat() {
-    document.getElementById('chatContainer').innerHTML = '';
-    history = [];
-}
-window.onload = () => {
-    const q = new URLSearchParams(window.location.search).get('q');
-    if(q) { document.getElementById('msgInput').value = q; sendMsg(); }
-};
-</script>
-</body>
-</html>
+# ===== الصفحات الجديدة =====
+ABOUT_PAGE = """
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>من نحن</title><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:40px;text-align:center;} .container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);} h1{color:#5b5bd6;} p{line-height:1.8;font-size:16px;text-align:right;}</style></head><body><div class="container"><h1>من نحن</h1><p>الريان للترجمة هي منصة رقمية مجانية تهدف إلى تسهيل ترجمة الملفات الأكاديمية (PDF و PPTX) للطلاب والباحثين في العالم العربي. انطلقت المنصة من السودان، وتستخدم أحدث تقنيات الذكاء الاصطناعي (مثل Gemini و DeepL) لتقديم ترجمات دقيقة وسريعة، مع الحفاظ على تنسيق الملفات الأصلية. نؤمن بأن المعرفة لا تحدها حدود، ونسعى لجعل المحتوى العلمي متاحاً للجميع بأسهل طريقة.</p><br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a></div></body></html>
+"""
+
+CONTACT_PAGE = """
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>اتصل بنا</title><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:40px;text-align:center;} .container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);} h1{color:#5b5bd6;} p{line-height:1.8;font-size:16px;text-align:right;}</style></head><body><div class="container"><h1>اتصل بنا</h1><p>هل لديك سؤال، اقتراح، أو واجهت مشكلة أثناء استخدام المنصة؟ يسعدنا تواصلك معنا.</p><p style="text-align:center;font-size:18px;margin:20px 0;"><strong>البريد الإلكتروني:</strong> <a href="mailto:Abureyan810@gmail.com" style="color:#5b5bd6;">Abureyan810@gmail.com</a></p><p style="text-align:center;font-size:18px;margin:20px 0;"><strong>واتساب:</strong> <a href="https://wa.me/249925284869" style="color:#5b5bd6;" target="_blank">اضغط هنا</a></p><p style="text-align:center;font-size:18px;"><strong>اتصال هاتفي:</strong> <a href="tel:+249925284869" style="color:#5b5bd6;">+249925284869</a></p><br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a></div></body></html>
+"""
+
+PRIVACY_PAGE = """
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>سياسة الخصوصية</title><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:40px;text-align:center;} .container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);} h1{color:#5b5bd6;} p,li{line-height:1.8;font-size:16px;text-align:right;}</style></head><body><div class="container"><h1>سياسة الخصوصية</h1><p>نحن في الريان للترجمة نحترم خصوصيتك. نوضح هنا كيفية تعاملنا مع بياناتك:</p><ul style="text-align:right;line-height:1.8;"><li><strong>الملفات المرفوعة:</strong> يتم معالجة الملفات مؤقتاً في الذاكرة، ولا نقوم بتخزينها أو مشاركتها مع أي طرف ثالث.</li><li><strong>ملفات تعريف الارتباط (Cookies):</strong> قد نستخدم ملفات تعريف الارتباط لتحسين تجربتك، ولعرض إعلانات مناسبة (إذا تم تفعيل الإعلانات لاحقاً).</li><li><strong>خدمات الطرف الثالث:</strong> نستخدم واجهات برمجة تطبيقات (APIs) من Google و DeepL للترجمة.</li><li><strong>لا نبيع بياناتك:</strong> نحن لا نبيع أو نشارك بياناتك الشخصية مع أي جهة خارجية.</li></ul><br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a></div></body></html>
+"""
+
+TERMS_PAGE = """
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>شروط الاستخدام</title><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:40px;text-align:center;} .container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);} h1{color:#5b5bd6;} p,li{line-height:1.8;font-size:16px;text-align:right;}</style></head><body><div class="container"><h1>شروط الاستخدام</h1><p>باستخدامك للمنصة، فإنك توافق على:</p><ul style="text-align:right;line-height:1.8;"><li>عدم استخدام المنصة لترجمة محتوى غير قانوني أو مسيء.</li><li>أنت المسؤول الوحيد عن المحتوى الذي ترفعه.</li><li>نحن غير مسؤولين عن أي أخطاء في الترجمة قد تنتج عن استخدام التقنيات الآلية.</li></ul><br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a></div></body></html>
+"""
+
+FAQ_PAGE = """
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>الأسئلة الشائعة</title><link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet"><style>body{font-family:'Tajawal',sans-serif;background:#f0f2f5;color:#2f365f;padding:40px;text-align:center;} .container{max-width:600px;margin:auto;background:#fff;padding:30px;border-radius:20px;box-shadow:0 8px 20px rgba(0,0,0,0.1);} h1{color:#5b5bd6;} p{line-height:1.8;font-size:16px;text-align:right;} strong{color:#5b5bd6;}</style></head><body><div class="container"><h1>الأسئلة الشائعة</h1><p><strong>هل الخدمة مجانية؟</strong><br>نعم، الخدمة مجانية بالكامل.</p><p><strong>هل تحفظون ملفاتي؟</strong><br>لا، يتم حذف الملفات فور إتمام الترجمة.</p><p><strong>لماذا تظهر المربعات في ملفات PDF؟</strong><br>لأننا نستخدم خطاً عربياً مضمناً، وقد يحتاج المتصفح للتحديث. جرب فتح الملف في برنامج آخر.</p><p><strong>هل يمكنني ترجمة ملفات كبيرة؟</strong><br>نعم، بحد أقصى 100 صفحة/شريحة لكل ملف.</p><br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a></div></body></html>
 """
 
 @app.route('/')
@@ -778,6 +666,26 @@ def admin_dashboard():
                 visitors = res.data[0].get('visitors', 0); translated = res.data[0].get('translated_files', 0); downloads = res.data[0].get('downloads', 0)
         except: pass
     return f"<html dir='rtl'><body style='background:#1a1a2e;color:#fff;text-align:center;padding:40px;'><h1>📊 إحصائيات الريان</h1><div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>👁️ الزوار<br><h2 style='color:#d4af37'>{visitors}</h2></div><div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>📄 الملفات<br><h2 style='color:#d4af37'>{translated}</h2></div><div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>📥 التحميلات<br><h2 style='color:#d4af37'>{downloads}</h2></div></body></html>"
+
+@app.route('/about')
+def about():
+    return render_template_string(ABOUT_PAGE)
+
+@app.route('/contact')
+def contact():
+    return render_template_string(CONTACT_PAGE)
+
+@app.route('/privacy')
+def privacy():
+    return render_template_string(PRIVACY_PAGE)
+
+@app.route('/terms')
+def terms():
+    return render_template_string(TERMS_PAGE)
+
+@app.route('/faq')
+def faq():
+    return render_template_string(FAQ_PAGE)
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
