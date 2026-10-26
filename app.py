@@ -799,15 +799,29 @@ def feedback():
 
 @app.route('/submit_feedback', methods=['POST'])
 def submit_feedback():
+    print('=== بدء إرسال التعليق ===')
     name = request.form.get('name', 'زائر') or 'زائر'
     message = request.form.get('message', '')
-    if supabase and message:
-        try:
-            res = supabase.table('feedback').insert({'name': name[:50], 'message': message[:500]}).execute()
-            print('Feedback insert response:', res)
-        except Exception as e:
-            print('Feedback insert error:', e)
-            return f'<h3>حدث خطأ:</h3><pre>{e}</pre><br><a href="/feedback">العودة</a>'
+    print(f'الاسم: {name}')
+    print(f'الرسالة: {message}')
+    
+    if not supabase:
+        print('خطأ: Supabase غير متصل')
+        return 'Supabase غير متصل', 500
+        
+    if not message:
+        print('خطأ: الرسالة فارغة')
+        return 'الرسالة فارغة', 400
+        
+    try:
+        print('محاولة الإدراج في Supabase...')
+        res = supabase.table('feedback').insert({'name': name[:50], 'message': message[:500]}).execute()
+        print(f'نتيجة الإدراج: {res}')
+    except Exception as e:
+        print(f'خطأ في الإدراج: {e}')
+        return f'خطأ: {e}', 500
+        
+    print('=== تم الإرسال بنجاح ===')
     return redirect('/feedback')
 
 @app.route('/community')
@@ -830,19 +844,34 @@ def community():
 
 @app.route('/submit_post', methods=['POST'])
 def submit_post():
+    print('=== بدء إرسال المنشور ===')
     name = request.form.get('name', '')
     university = request.form.get('university', '')
     message = request.form.get('message', '')
     whatsapp = request.form.get('whatsapp', '')
-    if supabase and name and university and message:
-        try:
-            res = supabase.table('community_posts').insert({
-                'name': name[:50], 'university': university[:100], 'message': message[:500], 'whatsapp': whatsapp[:20]
-            }).execute()
-            print('Post insert response:', res)
-        except Exception as e:
-            print('Post insert error:', e)
-            return f'<h3>حدث خطأ:</h3><pre>{e}</pre><br><a href="/community">العودة</a>'
+    print(f'الاسم: {name}')
+    print(f'الجامعة: {university}')
+    print(f'الرسالة: {message}')
+    
+    if not supabase:
+        print('خطأ: Supabase غير متصل')
+        return 'Supabase غير متصل', 500
+        
+    if not name or not university or not message:
+        print('خطأ: بيانات ناقصة')
+        return 'بيانات ناقصة', 400
+        
+    try:
+        print('محاولة الإدراج في Supabase...')
+        res = supabase.table('community_posts').insert({
+            'name': name[:50], 'university': university[:100], 'message': message[:500], 'whatsapp': whatsapp[:20]
+        }).execute()
+        print(f'نتيجة الإدراج: {res}')
+    except Exception as e:
+        print(f'خطأ في الإدراج: {e}')
+        return f'خطأ: {e}', 500
+        
+    print('=== تم الإرسال بنجاح ===')
     return redirect('/community')
 
 @app.route('/about')
@@ -878,38 +907,6 @@ def admin_dashboard():
         except: pass
     return f"<html dir='rtl'><body style='background:#1a1a2e;color:#fff;text-align:center;padding:40px;'><h1>📊 إحصائيات الريان</h1><div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>👁️ الزوار<br><h2 style='color:#d4af37'>{visitors}</h2></div><div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>📄 الملفات<br><h2 style='color:#d4af37'>{translated}</h2></div><div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>📥 التحميلات<br><h2 style='color:#d4af37'>{downloads}</h2></div></body></html>"
 
-
-@app.route('/api/submit_feedback', methods=['POST'])
-def api_submit_feedback():
-    data = request.json
-    name = data.get('name', 'زائر') or 'زائر'
-    message = data.get('message', '')
-    if supabase and message:
-        try:
-            supabase.table('feedback').insert({'name': name[:50], 'message': message[:500]}).execute()
-            return jsonify({'ok': True})
-        except Exception as e:
-            return jsonify({'error': str(e)})
-    return jsonify({'error': 'رسالة فارغة'})
-
-@app.route('/api/submit_post', methods=['POST'])
-def api_submit_post():
-    data = request.json
-    name = data.get('name', '')
-    university = data.get('university', '')
-    message = data.get('message', '')
-    whatsapp = data.get('whatsapp', '')
-    if supabase and name and university and message:
-        try:
-            supabase.table('community_posts').insert({
-                'name': name[:50], 'university': university[:100], 'message': message[:500], 'whatsapp': whatsapp[:20]
-            }).execute()
-            return jsonify({'ok': True})
-        except Exception as e:
-            return jsonify({'error': str(e)})
-    return jsonify({'error': 'بيانات ناقصة'})
-
 if __name__ == '__main__':
-
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
