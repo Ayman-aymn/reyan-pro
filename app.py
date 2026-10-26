@@ -1,5 +1,5 @@
 import os, io, uuid, json, threading, time, re, base64, tempfile
-from flask import Flask, request, jsonify, send_file, render_template_string, send_from_directory
+from flask import Flask, request, jsonify, send_file, render_template_string, send_from_directory, redirect
 from pptx import Presentation
 from pptx.util import Pt
 from pptx.enum.text import PP_ALIGN
@@ -592,7 +592,7 @@ button{background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none
 <hr style="margin:20px 0;border:1px solid #eee;">
 <h2 style="color:#5b5bd6;margin-bottom:15px;">آخر التعليقات</h2>
 <div id="comments_list">
-{{COMMENTS}}
+{{COMMENTS|safe}}
 </div>
 <br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a>
 </div>
@@ -638,7 +638,7 @@ button{background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none
 <hr style="margin:20px 0;border:1px solid #eee;">
 <h2 style="color:#5b5bd6;margin-bottom:15px;">آخر المنشورات</h2>
 <div id="posts_list">
-{{POSTS}}
+{{POSTS|safe}}
 </div>
 <br><a href="/" style="color:#5b5bd6;text-decoration:none;font-weight:bold;">← العودة للرئيسية</a>
 </div>
