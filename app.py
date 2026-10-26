@@ -16,7 +16,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from functools import wraps
 from collections import defaultdict
 from supabase import create_client
-import google.generativeai as genai
+from google import genai
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
@@ -30,7 +30,7 @@ MAX_HISTORY_LEN = 44
 CHAT_COOLDOWN = 2
 MAX_LOGIN_ATTEMPTS = 3
 LOGIN_BLOCK_TIME = 900
-MODELS_TO_TRY = ['gemini-3.5-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite-preview', 'gemini-3-flash-preview']
+MODELS_TO_TRY = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-3.1-flash-lite']
 WHATSAPP_NUMBER = '249925284869'
 PHONE_NUMBER = '+249925284869'
 WHATSAPP_CHANNEL = 'https://whatsapp.com/channel/0029VbDbf1V9MF8xMszlN61S'
@@ -74,7 +74,7 @@ SUPABASE_URL = os.environ.get('SUPABASE_URL')
 SUPABASE_SERVICE_KEY = os.environ.get('SUPABASE_SERVICE_KEY')
 
 if GEMINI_KEY:
-    genai.configure(api_key=GEMINI_KEY)
+    genai_client = genai.Client(api_key=GEMINI_KEY)
 
 supabase = None
 if SUPABASE_URL and SUPABASE_SERVICE_KEY:
@@ -158,11 +158,10 @@ def translate_image_with_gemini(image_bytes):
         img_b64 = base64.b64encode(image_bytes).decode('utf-8')
         for model_name in MODELS_TO_TRY:
             try:
-                model = genai.GenerativeModel(model_name)
                 prompt = "استخرج النص من هذه الصورة وترجمه إلى العربية. أعد الترجمة فقط."
-                resp = model.generate_content(
-                    [{'mime_type': 'image/jpeg', 'data': img_b64}, prompt],
-                    request_options={"timeout": 30}
+                resp = genai_client.models.generate_content(
+                    model=model_name,
+                    contents=[{'mime_type': 'image/jpeg', 'data': img_b64}, prompt]
                 )
                 if resp.text: return resp.text.strip()
             except: continue
@@ -732,10 +731,9 @@ def chat():
     last_error = ''
     for model_name in MODELS_TO_TRY:
         try:
-            model = genai.GenerativeModel(model_name)
-            chat_session = model.start_chat(history=formatted_history)
+            chat = genai_client.chats.create(model=model_name, history=formatted_history)
             prompt = "أنت مساعد ذكي مفيد جداً اسمه أيمن. أجب باللغة العربية بوضوح وإيجاز. " + message
-            resp = chat_session.send_message(prompt, request_options={'timeout': 30})
+            resp = chat.send_message(prompt)
             return jsonify({'reply': resp.text})
         except Exception as e:
             last_error = str(e)
@@ -772,8 +770,7 @@ def chat_file():
         last_error = ''
         for model_name in MODELS_TO_TRY:
             try:
-                model = genai.GenerativeModel(model_name)
-                resp = model.generate_content(prompt, request_options={'timeout': 30})
+                resp = genai_client.models.generate_content(model=model_name, contents=prompt)
                 return jsonify({'reply': resp.text})
             except Exception as e:
                 last_error = str(e)
