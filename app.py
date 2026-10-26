@@ -899,7 +899,8 @@ def chat_file():
         last_error = ''
         for model_name in MODELS_TO_TRY:
             try:
-                resp = genai_client.models.generate_content(model=model_name, contents=prompt)
+                model = genai.GenerativeModel(model_name)
+                resp = model.generate_content(prompt, request_options={'timeout': 30})
                 return jsonify({'reply': resp.text})
             except Exception as e:
                 last_error = str(e)
