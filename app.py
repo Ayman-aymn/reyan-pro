@@ -584,11 +584,25 @@ button{background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none
 <body>
 <div class="container">
 <h1>💬 التعليقات والاقتراحات</h1>
-<form action="/submit_feedback" method="POST">
-<input type="text" name="name" placeholder="اسمك (اختياري)" maxlength="50">
-<textarea name="message" placeholder="اكتب تعليقك أو اقتراحك هنا..." required maxlength="500"></textarea>
-<button type="submit">إرسال</button>
-</form>
+<div id="feedbackForm">
+<input type="text" id="fb_name" placeholder="اسمك (اختياري)" maxlength="50">
+<textarea id="fb_message" placeholder="اكتب تعليقك أو اقتراحك هنا..." required maxlength="500"></textarea>
+<button onclick="submitFeedback()">إرسال</button>
+</div>
+<script>
+async function submitFeedback() {
+    const name = document.getElementById('fb_name').value;
+    const message = document.getElementById('fb_message').value;
+    const res = await fetch('/api/submit_feedback', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name: name, message: message})
+    });
+    const data = await res.json();
+    if (data.error) { alert('خطأ: ' + data.error); }
+    else { window.location.href = '/feedback'; }
+}
+</script>
 <hr style="margin:20px 0;border:1px solid #eee;">
 <h2 style="color:#5b5bd6;margin-bottom:15px;">آخر التعليقات</h2>
 <div id="comments_list">
@@ -628,13 +642,29 @@ button{background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none
 <div class="container">
 <h1>🌐 مجتمع الريان</h1>
 <p style="margin-bottom:20px;">تواصل مع طلاب من جامعتك، واطلب المساعدة.</p>
-<form action="/submit_post" method="POST">
-<input type="text" name="name" placeholder="اسمك" required maxlength="50">
-<input type="text" name="university" placeholder="جامعتك (مثال: جامعة أم درمان الإسلامية)" required maxlength="100">
-<textarea name="message" placeholder="اكتب طلبك أو سؤالك هنا..." required maxlength="500"></textarea>
-<input type="text" name="whatsapp" placeholder="رقم واتساب (اختياري - للتواصل)" maxlength="20">
-<button type="submit">نشر</button>
-</form>
+<div id="communityForm">
+<input type="text" id="post_name" placeholder="اسمك" required maxlength="50">
+<input type="text" id="post_university" placeholder="جامعتك (مثال: جامعة أم درمان الإسلامية)" required maxlength="100">
+<textarea id="post_message" placeholder="اكتب طلبك أو سؤالك هنا..." required maxlength="500"></textarea>
+<input type="text" id="post_whatsapp" placeholder="رقم واتساب (اختياري - للتواصل)" maxlength="20">
+<button onclick="submitPost()">نشر</button>
+</div>
+<script>
+async function submitPost() {
+    const name = document.getElementById('post_name').value;
+    const university = document.getElementById('post_university').value;
+    const message = document.getElementById('post_message').value;
+    const whatsapp = document.getElementById('post_whatsapp').value;
+    const res = await fetch('/api/submit_post', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name: name, university: university, message: message, whatsapp: whatsapp})
+    });
+    const data = await res.json();
+    if (data.error) { alert('خطأ: ' + data.error); }
+    else { window.location.href = '/community'; }
+}
+</script>
 <hr style="margin:20px 0;border:1px solid #eee;">
 <h2 style="color:#5b5bd6;margin-bottom:15px;">آخر المنشورات</h2>
 <div id="posts_list">
@@ -878,6 +908,38 @@ def admin_dashboard():
         except: pass
     return f"<html dir='rtl'><body style='background:#1a1a2e;color:#fff;text-align:center;padding:40px;'><h1>📊 إحصائيات الريان</h1><div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>👁️ الزوار<br><h2 style='color:#d4af37'>{visitors}</h2></div><div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>📄 الملفات<br><h2 style='color:#d4af37'>{translated}</h2></div><div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>📥 التحميلات<br><h2 style='color:#d4af37'>{downloads}</h2></div></body></html>"
 
+
+@app.route('/api/submit_feedback', methods=['POST'])
+def api_submit_feedback():
+    data = request.json
+    name = data.get('name', 'زائر') or 'زائر'
+    message = data.get('message', '')
+    if supabase and message:
+        try:
+            supabase.table('feedback').insert({'name': name[:50], 'message': message[:500]}).execute()
+            return jsonify({'ok': True})
+        except Exception as e:
+            return jsonify({'error': str(e)})
+    return jsonify({'error': 'رسالة فارغة'})
+
+@app.route('/api/submit_post', methods=['POST'])
+def api_submit_post():
+    data = request.json
+    name = data.get('name', '')
+    university = data.get('university', '')
+    message = data.get('message', '')
+    whatsapp = data.get('whatsapp', '')
+    if supabase and name and university and message:
+        try:
+            supabase.table('community_posts').insert({
+                'name': name[:50], 'university': university[:100], 'message': message[:500], 'whatsapp': whatsapp[:20]
+            }).execute()
+            return jsonify({'ok': True})
+        except Exception as e:
+            return jsonify({'error': str(e)})
+    return jsonify({'error': 'بيانات ناقصة'})
+
 if __name__ == '__main__':
+
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
