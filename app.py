@@ -348,6 +348,7 @@ def process_pptx(job_id, data, translate_images=False, to_pdf=False):
             JOBS[job_id]['type'] = 'pdf'
         else:
             for i, slide in enumerate(prs.slides):
+                # 1. ترجمة النصوص العادية
                 for shape in slide.shapes:
                     if shape.has_text_frame and shape.text.strip():
                         orig = shape.text.strip()
@@ -361,38 +362,33 @@ def process_pptx(job_id, data, translate_images=False, to_pdf=False):
                                 p.alignment = PP_ALIGN.RIGHT
                                 p.space_before = Pt(10)
                 
+                # 2. ترجمة الصور وإضافتها إلى الملاحظات (Notes)
                 if translate_images:
+                    notes_text = []
                     for shape in slide.shapes:
                         if shape.shape_type == 13:
                             try:
                                 image_bytes = shape.image.blob
                                 translated_text = translate_image_with_gemini(image_bytes)
                                 if translated_text:
-                                    left = shape.left
-                                    top = shape.top
-                                    width = shape.width
-                                    height = shape.height
-                                    textbox_top = top + height + Pt(30)
-                                    textbox_left = left
-                                    textbox_width = width
-                                    textbox_height = Pt(120)
-                                    txBox = slide.shapes.add_textbox(textbox_left, textbox_top, textbox_width, textbox_height)
-                                    tf = txBox.text_frame
-                                    tf.word_wrap = True
-                                    tf.text = "ترجمة الصورة:"
-                                    tf.paragraphs[0].font.size = Pt(20)
-                                    tf.paragraphs[0].font.name = 'Arial'
-                                    tf.paragraphs[0].alignment = PP_ALIGN.RIGHT
-                                    p = tf.add_paragraph()
-                                    p.text = translated_text
-                                    p.font.size = Pt(24)
-                                    p.font.name = 'Arial'
-                                    p.alignment = PP_ALIGN.RIGHT
-                                    fill = txBox.fill
-                                    fill.solid()
-                                    fill.fore_color.rgb = RGBColor(255, 255, 255)
-                            except Exception as e:
-                                print(f"Error processing image: {e}")
+                                    notes_text.append(translated_text)
+                            except: pass
+                    
+                    if notes_text:
+                        try:
+                            notes_slide = slide.notes_slide
+                            tf = notes_slide.notes_text_frame
+                            tf.text = "ترجمة الصور:
+"
+                            for tr in notes_text:
+                                p = tf.add_paragraph()
+                                p.text = tr
+                                p.font.size = Pt(16)
+                                p.font.name = 'Arial'
+                                p.alignment = PP_ALIGN.RIGHT
+                        except Exception as e:
+                            print(f"Error adding notes: {e}")
+                
                 JOBS[job_id]['progress'] = int(((i+1)/total)*100)
                 JOBS[job_id]['stage'] = f'ترجمة الشريحة {i+1} من {total}'
             
