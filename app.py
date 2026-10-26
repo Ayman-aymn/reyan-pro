@@ -30,7 +30,7 @@ MAX_HISTORY_LEN = 44
 CHAT_COOLDOWN = 2
 MAX_LOGIN_ATTEMPTS = 3
 LOGIN_BLOCK_TIME = 900
-MODELS_TO_TRY = ['gemini-3.8-flash']
+MODELS_TO_TRY = ['gemini-3.5-flash']
 WHATSAPP_NUMBER = '249925284869'
 PHONE_NUMBER = '+249925284869'
 WHATSAPP_CHANNEL = 'https://whatsapp.com/channel/0029VbDbf1V9MF8xMszlN61S'
@@ -159,7 +159,7 @@ def translate_image_with_gemini(image_bytes):
         for model_name in MODELS_TO_TRY:
             try:
                 prompt = "استخرج النص من هذه الصورة وترجمه إلى العربية. أعد الترجمة فقط."
-                resp = genai_client.models.generate_content(
+                resp = genai.GenerativeModel(model_name).generate_content(
                     model=model_name,
                     contents=[{'mime_type': 'image/jpeg', 'data': img_b64}, prompt]
                 )
