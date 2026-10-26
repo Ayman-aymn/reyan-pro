@@ -378,8 +378,13 @@ def process_pptx(job_id, data, translate_images=False, to_pdf=False):
                         try:
                             notes_slide = slide.notes_slide
                             tf = notes_slide.notes_text_frame
-                            tf.text = "ترجمة الصور:
-"
+                            tf.text = "ترجمة الصور:" + chr(10)
+                            for tr in notes_text:
+                                p = tf.add_paragraph()
+                                p.text = tr
+                                p.font.size = Pt(16)
+                                p.font.name = "Arial"
+                                p.alignment = PP_ALIGN.RIGHT
                             for tr in notes_text:
                                 p = tf.add_paragraph()
                                 p.text = tr
