@@ -548,10 +548,7 @@ body{min-height:100vh;background:linear-gradient(135deg, #eef2ff 0%, #c7b8ff 100
 
 
   
-<div id="ad-container" style="margin: 15px 0; min-height: 100px;"></div>
-<script>
-document.getElementById('ad-container').innerHTML = '<script data-cfasync="false" src="https://bauval.org/14/0da00ca253e63df3d2cc05d14ea88894"><\/script>';
-</script>
+
 
   <div class="card">
     <h3 style="color:#5b5bd6;margin-bottom:10px;">⚡ ترجمة سريعة</h3>
