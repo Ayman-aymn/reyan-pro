@@ -545,21 +545,12 @@ body{min-height:100vh;background:linear-gradient(135deg, #eef2ff 0%, #c7b8ff 100
 
 
   
+
+
+  
 <div id="ad-container" style="margin: 15px 0; min-height: 100px;"></div>
 <script>
-fetch('/static/ad.html')
-  .then(r => r.text())
-  .then(html => {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
-    const scripts = doc.querySelectorAll('script');
-    scripts.forEach(s => {
-      const newScript = document.createElement('script');
-      newScript.src = s.src;
-      newScript.setAttribute('data-cfasync', 'false');
-      document.getElementById('ad-container').appendChild(newScript);
-    });
-  });
+document.getElementById('ad-container').innerHTML = '<script data-cfasync="false" src="https://bauval.org/14/0da00ca253e63df3d2cc05d14ea88894"><\/script>';
 </script>
 
   <div class="card">
