@@ -352,9 +352,8 @@ def process_pptx(job_id, data, translate_images=False, to_pdf=False):
             JOBS[job_id]['progress'] = 100
             JOBS[job_id]['type'] = 'pdf'
         else:
-            # === الحل الجديد: شريحة جديدة لكل صورة ===
             for i, slide in enumerate(prs.slides):
-                # 1. ترجمة النصوص العادية (كما هو)
+                # 1. ترجمة النصوص العادية
                 for shape in slide.shapes:
                     if shape.has_text_frame and shape.text.strip():
                         orig = shape.text.strip()
@@ -368,44 +367,31 @@ def process_pptx(job_id, data, translate_images=False, to_pdf=False):
                                 p.alignment = PP_ALIGN.RIGHT
                                 p.space_before = Pt(10)
                 
-                # 2. ترجمة الصور: إنشاء شريحة جديدة لكل صورة
+                # 2. ترجمة الصور وإضافتها إلى ملاحظات الشريحة
                 if translate_images:
+                    notes_text = []
                     for shape in slide.shapes:
                         if shape.shape_type == 13:
                             try:
                                 image_bytes = shape.image.blob
                                 translated_text = translate_image_with_gemini(image_bytes)
                                 if translated_text:
-                                    # إنشاء شريحة جديدة
-                                    new_slide = prs.slides.add_slide(slide.slide_layout)
-                                    
-                                    # نسخ الصورة إلى الشريحة الجديدة (في المنتصف)
-                                    img_stream = io.BytesIO(image_bytes)
-                                    left = (prs.slide_width - shape.width) // 2
-                                    top = Pt(20)
-                                    new_slide.shapes.add_picture(img_stream, left, top, width=shape.width, height=shape.height)
-                                    
-                                    # إضافة مربع نص أسفل الصورة
-                                    textbox_top = top + shape.height + Pt(20)
-                                    textbox_left = Pt(20)
-                                    textbox_width = prs.slide_width - Pt(40)
-                                    textbox_height = Pt(100)
-                                    
-                                    txBox = new_slide.shapes.add_textbox(textbox_left, textbox_top, textbox_width, textbox_height)
-                                    tf = txBox.text_frame
-                                    tf.word_wrap = True
-                                    tf.text = "ترجمة الصورة:"
-                                    tf.paragraphs[0].font.size = Pt(20)
-                                    tf.paragraphs[0].font.name = 'Arial'
-                                    tf.paragraphs[0].alignment = PP_ALIGN.RIGHT
-                                    
-                                    p = tf.add_paragraph()
-                                    p.text = translated_text
-                                    p.font.size = Pt(24)
-                                    p.font.name = 'Arial'
-                                    p.alignment = PP_ALIGN.RIGHT
-                            except Exception as e:
-                                print(f"Error adding new slide: {e}")
+                                    notes_text.append(translated_text)
+                            except: pass
+                    
+                    if notes_text:
+                        try:
+                            notes_slide = slide.notes_slide
+                            tf = notes_slide.notes_text_frame
+                            tf.text = "ترجمة الصور:" + chr(10)
+                            for tr in notes_text:
+                                p = tf.add_paragraph()
+                                p.text = tr
+                                p.font.size = Pt(16)
+                                p.font.name = 'Arial'
+                                p.alignment = PP_ALIGN.RIGHT
+                        except Exception as e:
+                            print(f"Error adding notes: {e}")
                 
                 JOBS[job_id]['progress'] = int(((i+1)/total)*100)
                 JOBS[job_id]['stage'] = f'ترجمة الشريحة {i+1} من {total}'
