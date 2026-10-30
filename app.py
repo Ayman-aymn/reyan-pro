@@ -4,7 +4,6 @@ from pptx import Presentation
 from pptx.util import Pt
 from pptx.enum.text import PP_ALIGN
 from pptx.dml.color import RGBColor
-import fitz
 import requests
 import arabic_reshaper
 from bidi.algorithm import get_display
