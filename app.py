@@ -153,8 +153,6 @@ def translate_batch(texts):
     return results
 
 def translate_image_with_gemini(image_bytes):
-    import time
-    time.sleep(3)  # تأخير 3 ثوانٍ بين كل صورة
     try:
         from google import genai
         from google.genai import types
@@ -165,7 +163,14 @@ def translate_image_with_gemini(image_bytes):
         
         for model_name in MODELS_TO_TRY:
             try:
-                resp = client.models.generate_content(model=model_name, contents=[prompt, image_part])
+                # إجبار Gemini على استخدام دقة عالية للصور
+                resp = client.models.generate_content(
+                    model=model_name,
+                    contents=[prompt, image_part],
+                    config=types.GenerateContentConfig(
+                        media_resolution='high'
+                    )
+                )
                 if resp.text: return resp.text.strip()
             except Exception as e:
                 print(f"Gemini image error with {model_name}: {e}")
