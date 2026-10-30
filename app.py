@@ -588,7 +588,7 @@ body{min-height:100vh;background:linear-gradient(135deg, #eef2ff 0%, #c7b8ff 100
   </div>
 </div>
 <div class="footer">
-    <a href="/blog">المدونة</a> | <a href="/">الرئيسية</a> | <a href="/about">من نحن</a> | 
+    <a href="/">الرئيسية</a> | <a href="/about">من نحن</a> | 
     <a href="/contact">اتصل بنا</a> | 
     <a href="/privacy">سياسة الخصوصية</a> | 
     <a href="/terms">شروط الاستخدام</a> | 
