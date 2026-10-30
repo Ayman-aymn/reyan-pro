@@ -299,6 +299,7 @@ window.onload = () => {
 
 
 def process_pptx(job_id, data, translate_images=False, to_pdf=False):
+    print(f"=== process_pptx: translate_images={translate_images}, to_pdf={to_pdf} ===")
     try:
         prs = Presentation(io.BytesIO(data))
         total = len(prs.slides)
