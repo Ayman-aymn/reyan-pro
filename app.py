@@ -40,12 +40,7 @@ last_chat_time = defaultdict(float)
 
 @app.after_request
 def add_security_headers(response):
-    response.headers['X-Content-Type-Options'] = 'nosniff'
-    response.headers['X-Frame-Options'] = 'DENY'
-    response.headers['X-XSS-Protection'] = '1; mode=block'
-    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
-
-    response.headers['Referrer-Policy'] = 'no-referrer'
+    response.headers['Content-Security-Policy'] = "default-src 'self' *; script-src 'self' 'unsafe-inline' 'unsafe-eval' *; img-src 'self' data: *; style-src 'self' 'unsafe-inline' *;"
     return response
 
 def check_auth(username, password):
@@ -593,7 +588,7 @@ body{min-height:100vh;background:linear-gradient(135deg, #eef2ff 0%, #c7b8ff 100
   </div>
 </div>
 <div class="footer">
-    <a href="/">الرئيسية</a> | <a href="/about">من نحن</a> | 
+    <a href="/blog">المدونة</a> | <a href="/">الرئيسية</a> | <a href="/about">من نحن</a> | 
     <a href="/contact">اتصل بنا</a> | 
     <a href="/privacy">سياسة الخصوصية</a> | 
     <a href="/terms">شروط الاستخدام</a> | 
