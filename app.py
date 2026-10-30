@@ -154,6 +154,7 @@ def translate_batch(texts):
 
 def translate_image_with_gemini(image_bytes):
     try:
+        # استخدام المكتبة الجديدة (google-genai)
         from google import genai
         from google.genai import types
         
