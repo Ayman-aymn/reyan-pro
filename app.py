@@ -363,7 +363,7 @@ def process_pptx(job_id, data, translate_images=False, to_pdf=False):
                             if tr and tr != orig:
                                 p = shape.text_frame.add_paragraph()
                                 p.text = tr
-                                p.font.size = Pt(28)
+                                p.font.size = Pt(24)
                                 p.font.name = 'Arial'
                                 p.alignment = PP_ALIGN.RIGHT
                                 p.space_before = Pt(10)
