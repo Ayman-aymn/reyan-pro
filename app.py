@@ -1058,18 +1058,27 @@ def faq():
 @app.route('/admin-dashboard-secret')
 def admin_dashboard():
     auth = request.authorization
-    if not auth or not check_auth(auth.username, auth.password): return authenticate()
-    visitors = 0; translated = 0; downloads = 0
+    if not auth or not check_auth(auth.username, auth.password):
+        return authenticate()
+    
+    visitors = 0
+    translated = 0
+    downloads = 0
     if supabase:
         try:
             res = supabase.table('stats').select('*').eq('id', 1).execute()
             if res.data:
-                visitors = res.data[0].get('visitors', 0); translated = res.data[0].get('translated_files', 0); downloads = res.data[0].get('downloads', 0)
+                visitors = res.data[0].get('visitors', 0)
+                translated = res.data[0].get('translated_files', 0)
+                downloads = res.data[0].get('downloads', 0)
         except: pass
-    return f"<html dir='rtl'><body style='background:#1a1a2e;color:#fff;text-align:center;padding:40px;'><h1>📊 إحصائيات الريان</h1><div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>👁️ الزوار<br><h2 style='color:#d4af37'>{visitors}</h2></div><div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>📄 الملفات<br><h2 style='color:#d4af37'>{translated}</h2></div><div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>📥 التحميلات<br><h2 style='color:#d4af37'>{downloads}</h2></div>
-<script data-cfasync="false" src="https://bauval.org/14/0da00ca253e63df3d2cc05d14ea88894"></script>
-
-</body></html>"
+    
+    return f"""<html dir='rtl'><body style='background:#1a1a2e;color:#fff;text-align:center;padding:40px;'>
+    <h1>📊 إحصائيات الريان</h1>
+    <div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>👁️ الزوار<br><h2 style='color:#d4af37'>{visitors}</h2></div>
+    <div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>📄 الملفات<br><h2 style='color:#d4af37'>{translated}</h2></div>
+    <div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>📥 التحميلات<br><h2 style='color:#d4af37'>{downloads}</h2></div>
+    </body></html>"""
 
 
 @app.route('/ad.html')
