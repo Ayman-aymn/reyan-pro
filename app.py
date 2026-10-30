@@ -791,6 +791,7 @@ def robots():
 @app.route('/upload', methods=['POST'])
 @rate_limit
 def upload():
+    print('=== تم استلام طلب رفع ملف جديد ===')
     if 'file' not in request.files: return jsonify({"error": "no file"}), 400
     file = request.files['file']
     if file.filename == '': return jsonify({"error": "empty name"}), 400
