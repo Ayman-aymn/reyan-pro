@@ -541,6 +541,11 @@ body{min-height:100vh;background:linear-gradient(135deg, #eef2ff 0%, #c7b8ff 100
   
   
 
+  
+<div class="card" style="padding: 0; overflow: hidden;">
+    <iframe src="/ad.html" style="width: 100%; height: 100px; border: none;"></iframe>
+</div>
+
   <div class="card">
     <h3 style="color:#5b5bd6;margin-bottom:10px;">⚡ ترجمة سريعة</h3>
     <div class="quick-translate">
