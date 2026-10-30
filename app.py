@@ -864,7 +864,7 @@ def chat():
             model = genai.GenerativeModel(clean_name)
             chat_session = model.start_chat(history=formatted_history)
             prompt = "أنت مساعد ذكي مفيد جداً اسمه أيمن. أجب باللغة العربية بوضوح وإيجاز. " + message
-            resp = chat_session.send_message(prompt, request_options={'timeout': 30})
+            resp = chat_session.send_message(prompt, request_options={'timeout': 90})
             return jsonify({'reply': resp.text})
         except Exception as e:
             last_error = str(e)
@@ -903,7 +903,7 @@ def chat_file():
         for model_name in MODELS_TO_TRY:
             try:
                 model = genai.GenerativeModel(model_name)
-                resp = model.generate_content(prompt, request_options={'timeout': 30})
+                resp = model.generate_content(prompt, request_options={'timeout': 90})
                 return jsonify({'reply': resp.text})
             except Exception as e:
                 last_error = str(e)
