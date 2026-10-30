@@ -536,6 +536,11 @@ body{min-height:100vh;background:linear-gradient(135deg, #eef2ff 0%, #c7b8ff 100
     </div>
   </div>
   
+  
+<div class="card" style="padding: 0; overflow: hidden;">
+    <iframe src="/ad.html" style="width: 100%; height: 100px; border: none;"></iframe>
+</div>
+
   <div class="card">
     <h3 style="color:#5b5bd6;margin-bottom:10px;">⚡ ترجمة سريعة</h3>
     <div class="quick-translate">
@@ -1038,6 +1043,11 @@ def admin_dashboard():
                 visitors = res.data[0].get('visitors', 0); translated = res.data[0].get('translated_files', 0); downloads = res.data[0].get('downloads', 0)
         except: pass
     return f"<html dir='rtl'><body style='background:#1a1a2e;color:#fff;text-align:center;padding:40px;'><h1>📊 إحصائيات الريان</h1><div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>👁️ الزوار<br><h2 style='color:#d4af37'>{visitors}</h2></div><div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>📄 الملفات<br><h2 style='color:#d4af37'>{translated}</h2></div><div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>📥 التحميلات<br><h2 style='color:#d4af37'>{downloads}</h2></div></body></html>"
+
+
+@app.route('/ad.html')
+def ad():
+    return send_from_directory('static', 'ad.html')
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
