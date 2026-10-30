@@ -354,11 +354,18 @@ def process_pptx(job_id, data, translate_images=False, to_pdf=False):
             JOBS[job_id]['type'] = 'pdf'
         else:
             for i, slide in enumerate(prs.slides):
-                # 1. ترجمة النصوص العادية
+                # 1. ترجمة النصوص العادية مع تكبير المربعات المزدحمة
                 for shape in slide.shapes:
                     if shape.has_text_frame and shape.text.strip():
                         orig = shape.text.strip()
                         if len(orig) > 1:
+                            # عد الفقرات في المربع
+                            paragraph_count = len([p for p in shape.text_frame.paragraphs if p.text.strip()])
+                            
+                            # إذا كان المربع مزدحماً (أكثر من 3 فقرات)، كبر ارتفاعه
+                            if paragraph_count > 3:
+                                shape.height = shape.height * 1.5
+                            
                             tr = translate_text(orig)
                             if tr and tr != orig:
                                 p = shape.text_frame.add_paragraph()
@@ -388,7 +395,7 @@ def process_pptx(job_id, data, translate_images=False, to_pdf=False):
                             for tr in notes_text:
                                 p = tf.add_paragraph()
                                 p.text = tr
-                                p.font.size = Pt(16)
+                                p.font.size = Pt(20)
                                 p.font.name = 'Arial'
                                 p.alignment = PP_ALIGN.RIGHT
                         except Exception as e:
