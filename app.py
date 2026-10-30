@@ -542,9 +542,25 @@ body{min-height:100vh;background:linear-gradient(135deg, #eef2ff 0%, #c7b8ff 100
   
 
   
-<div class="card" style="padding: 0; overflow: hidden;">
-    <iframe src="/ad.html" style="width: 100%; height: 100px; border: none;"></iframe>
-</div>
+
+
+  
+<div id="ad-container" style="margin: 15px 0; min-height: 100px;"></div>
+<script>
+fetch('/static/ad.html')
+  .then(r => r.text())
+  .then(html => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const scripts = doc.querySelectorAll('script');
+    scripts.forEach(s => {
+      const newScript = document.createElement('script');
+      newScript.src = s.src;
+      newScript.setAttribute('data-cfasync', 'false');
+      document.getElementById('ad-container').appendChild(newScript);
+    });
+  });
+</script>
 
   <div class="card">
     <h3 style="color:#5b5bd6;margin-bottom:10px;">⚡ ترجمة سريعة</h3>
