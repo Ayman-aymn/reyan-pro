@@ -44,7 +44,7 @@ def add_security_headers(response):
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-XSS-Protection'] = '1; mode=block'
     response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
-    response.headers['Content-Security-Policy'] = "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' https://*.adsterra.com https://*.bauval.org https://*.highperformanceformat.com https://*.adsterra.net; img-src 'self' data: https://*.adsterra.com;"
+    response.headers['Content-Security-Policy'] = "default-src * 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; img-src * data:; style-src * 'unsafe-inline';""default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' https://*.adsterra.com https://*.bauval.org https://*.highperformanceformat.com https://*.adsterra.net; img-src 'self' data: https://*.adsterra.com;"
     response.headers['Referrer-Policy'] = 'no-referrer'
     return response
 
