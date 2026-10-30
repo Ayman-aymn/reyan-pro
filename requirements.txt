@@ -1,6 +1,5 @@
 Flask==2.3.3
 python-pptx==0.6.21
-PyMuPDF==1.23.7
 arabic-reshaper==3.0.0
 python-bidi==0.4.2
 reportlab==4.0.7
@@ -8,4 +7,3 @@ requests==2.31.0
 google-generativeai
 gunicorn==21.2.0
 supabase
-google-generativeai

@@ -155,17 +155,22 @@ def translate_batch(texts):
 
 def translate_image_with_gemini(image_bytes):
     try:
-        img_b64 = base64.b64encode(image_bytes).decode('utf-8')
+        from google import genai
+        from google.genai import types
+        
+        client = genai.Client(api_key=GEMINI_KEY)
+        image_part = types.Part.from_bytes(data=image_bytes, mime_type='image/jpeg')
+        prompt = "استخرج النص من هذه الصورة وترجمه إلى العربية. أعد الترجمة فقط."
+        
         for model_name in MODELS_TO_TRY:
             try:
-                prompt = "استخرج النص من هذه الصورة وترجمه إلى العربية. أعد الترجمة فقط."
-                resp = genai.GenerativeModel(model_name).generate_content(
-                    model=model_name,
-                    contents=[{'mime_type': 'image/jpeg', 'data': img_b64}, prompt]
-                )
+                resp = client.models.generate_content(model=model_name, contents=[prompt, image_part])
                 if resp.text: return resp.text.strip()
-            except: continue
-    except: pass
+            except Exception as e:
+                print(f"Gemini image error with {model_name}: {e}")
+                continue
+    except Exception as e:
+        print(f"Gemini client error: {e}")
     return None
 
 # ===== PPTX =====
