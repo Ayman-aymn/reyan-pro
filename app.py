@@ -163,14 +163,7 @@ def translate_image_with_gemini(image_bytes):
         
         for model_name in MODELS_TO_TRY:
             try:
-                # إجبار Gemini على استخدام دقة عالية للصور
-                resp = client.models.generate_content(
-                    model=model_name,
-                    contents=[prompt, image_part],
-                    config=types.GenerateContentConfig(
-                        media_resolution='high'
-                    )
-                )
+                resp = client.models.generate_content(model=model_name, contents=[prompt, image_part])
                 if resp.text: return resp.text.strip()
             except Exception as e:
                 print(f"Gemini image error with {model_name}: {e}")
@@ -370,7 +363,7 @@ def process_pptx(job_id, data, translate_images=False, to_pdf=False):
                             if tr and tr != orig:
                                 p = shape.text_frame.add_paragraph()
                                 p.text = tr
-                                p.font.size = Pt(24)
+                                p.font.size = Pt(20)
                                 p.font.name = 'Arial'
                                 p.alignment = PP_ALIGN.RIGHT
                                 p.space_before = Pt(10)
