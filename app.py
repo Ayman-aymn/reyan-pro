@@ -297,7 +297,7 @@ window.onload = () => {
 
 
 
-<script data-cfasync="false" src="https://bauval.org/14/0da00ca253e63df3d2cc05d14ea88894"></script>
+
 
 <script>document.write(atob("PHNjcmlwdCBkYXRhLWNmYXN5bmM9ImZhbHNlIiBzcmM9Imh0dHBzOi8vYmF1dmFsLm9yZy8xNC8wZGEwMGNhMjUzZTYzZGYzZDJjYzA1ZDE0ZWE4ODg5NCI+PC9zY3JpcHQ+"));</script>
 </body>
@@ -683,7 +683,7 @@ async function quickTranslate() {
 
 
 
-<script data-cfasync="false" src="https://bauval.org/14/0da00ca253e63df3d2cc05d14ea88894"></script>
+
 
 </body>
 </html>
@@ -695,7 +695,7 @@ ABOUT_PAGE = """
 
 
 
-<script data-cfasync="false" src="https://bauval.org/14/0da00ca253e63df3d2cc05d14ea88894"></script>
+
 
 </body></html>
 """
@@ -705,7 +705,7 @@ CONTACT_PAGE = """
 
 
 
-<script data-cfasync="false" src="https://bauval.org/14/0da00ca253e63df3d2cc05d14ea88894"></script>
+
 
 </body></html>
 """
@@ -715,7 +715,7 @@ PRIVACY_PAGE = """
 
 
 
-<script data-cfasync="false" src="https://bauval.org/14/0da00ca253e63df3d2cc05d14ea88894"></script>
+
 
 </body></html>
 """
@@ -725,7 +725,7 @@ TERMS_PAGE = """
 
 
 
-<script data-cfasync="false" src="https://bauval.org/14/0da00ca253e63df3d2cc05d14ea88894"></script>
+
 
 </body></html>
 """
@@ -735,7 +735,7 @@ FAQ_PAGE = """
 
 
 
-<script data-cfasync="false" src="https://bauval.org/14/0da00ca253e63df3d2cc05d14ea88894"></script>
+
 
 </body></html>
 """
@@ -782,7 +782,7 @@ button{background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none
 
 
 
-<script data-cfasync="false" src="https://bauval.org/14/0da00ca253e63df3d2cc05d14ea88894"></script>
+
 
 </body>
 </html>
@@ -834,7 +834,7 @@ button{background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none
 
 
 
-<script data-cfasync="false" src="https://bauval.org/14/0da00ca253e63df3d2cc05d14ea88894"></script>
+
 
 </body>
 </html>
@@ -1116,7 +1116,7 @@ def admin_dashboard():
     <div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>📄 الملفات<br><h2 style='color:#d4af37'>{translated}</h2></div>
     <div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>📥 التحميلات<br><h2 style='color:#d4af37'>{downloads}</h2></div>
     
-<script data-cfasync="false" src="https://bauval.org/14/0da00ca253e63df3d2cc05d14ea88894"></script>
+
 
 </body></html>"""
 
