@@ -296,7 +296,7 @@ window.onload = () => {
 
 
 
-<script>document.write(atob("PHNjcmlwdCBkYXRhLWNmYXN5bmM9ImZhbHNlIiBzcmM9Imh0dHBzOi8vYmF1dmFsLm9yZy8xNC8wZGEwMGNhMjUzZTYzZGYzZDJjYzA1ZDE0ZWE4ODg5NCI+PC9zY3JpcHQ+"));</script>
+
 </body>
 </html>
 """
@@ -693,7 +693,7 @@ async function quickTranslate() {
 
 
 
-<script>document.write(atob("PHNjcmlwdCBkYXRhLWNmYXN5bmM9ImZhbHNlIiBzcmM9Imh0dHBzOi8vYmF1dmFsLm9yZy8xNC8wZGEwMGNhMjUzZTYzZGYzZDJjYzA1ZDE0ZWE4ODg5NCI+PC9zY3JpcHQ+"));</script>
+
 </body>
 </html>
 """
@@ -707,7 +707,7 @@ ABOUT_PAGE = """
 
 
 
-<script>document.write(atob("PHNjcmlwdCBkYXRhLWNmYXN5bmM9ImZhbHNlIiBzcmM9Imh0dHBzOi8vYmF1dmFsLm9yZy8xNC8wZGEwMGNhMjUzZTYzZGYzZDJjYzA1ZDE0ZWE4ODg5NCI+PC9zY3JpcHQ+"));</script>
+
 </body></html>
 """
 
@@ -719,7 +719,7 @@ CONTACT_PAGE = """
 
 
 
-<script>document.write(atob("PHNjcmlwdCBkYXRhLWNmYXN5bmM9ImZhbHNlIiBzcmM9Imh0dHBzOi8vYmF1dmFsLm9yZy8xNC8wZGEwMGNhMjUzZTYzZGYzZDJjYzA1ZDE0ZWE4ODg5NCI+PC9zY3JpcHQ+"));</script>
+
 </body></html>
 """
 
@@ -731,7 +731,7 @@ PRIVACY_PAGE = """
 
 
 
-<script>document.write(atob("PHNjcmlwdCBkYXRhLWNmYXN5bmM9ImZhbHNlIiBzcmM9Imh0dHBzOi8vYmF1dmFsLm9yZy8xNC8wZGEwMGNhMjUzZTYzZGYzZDJjYzA1ZDE0ZWE4ODg5NCI+PC9zY3JpcHQ+"));</script>
+
 </body></html>
 """
 
@@ -743,7 +743,7 @@ TERMS_PAGE = """
 
 
 
-<script>document.write(atob("PHNjcmlwdCBkYXRhLWNmYXN5bmM9ImZhbHNlIiBzcmM9Imh0dHBzOi8vYmF1dmFsLm9yZy8xNC8wZGEwMGNhMjUzZTYzZGYzZDJjYzA1ZDE0ZWE4ODg5NCI+PC9zY3JpcHQ+"));</script>
+
 </body></html>
 """
 
@@ -755,7 +755,7 @@ FAQ_PAGE = """
 
 
 
-<script>document.write(atob("PHNjcmlwdCBkYXRhLWNmYXN5bmM9ImZhbHNlIiBzcmM9Imh0dHBzOi8vYmF1dmFsLm9yZy8xNC8wZGEwMGNhMjUzZTYzZGYzZDJjYzA1ZDE0ZWE4ODg5NCI+PC9zY3JpcHQ+"));</script>
+
 </body></html>
 """
 
@@ -804,7 +804,7 @@ button{background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none
 
 
 
-<script>document.write(atob("PHNjcmlwdCBkYXRhLWNmYXN5bmM9ImZhbHNlIiBzcmM9Imh0dHBzOi8vYmF1dmFsLm9yZy8xNC8wZGEwMGNhMjUzZTYzZGYzZDJjYzA1ZDE0ZWE4ODg5NCI+PC9zY3JpcHQ+"));</script>
+
 </body>
 </html>
 """
@@ -858,7 +858,7 @@ button{background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none
 
 
 
-<script>document.write(atob("PHNjcmlwdCBkYXRhLWNmYXN5bmM9ImZhbHNlIiBzcmM9Imh0dHBzOi8vYmF1dmFsLm9yZy8xNC8wZGEwMGNhMjUzZTYzZGYzZDJjYzA1ZDE0ZWE4ODg5NCI+PC9zY3JpcHQ+"));</script>
+
 </body>
 </html>
 """
@@ -1142,7 +1142,7 @@ def admin_dashboard():
 
 
 
-<script>document.write(atob("PHNjcmlwdCBkYXRhLWNmYXN5bmM9ImZhbHNlIiBzcmM9Imh0dHBzOi8vYmF1dmFsLm9yZy8xNC8wZGEwMGNhMjUzZTYzZGYzZDJjYzA1ZDE0ZWE4ODg5NCI+PC9zY3JpcHQ+"));</script>
+
 </body></html>"""
 
 
