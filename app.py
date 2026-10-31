@@ -1139,7 +1139,11 @@ def admin_dashboard():
             res = supabase.table('feedback').select('*').order('created_at', desc=True).execute()
             if res.data:
                 for c in res.data:
-                    comments_html += f"<div style='background:#2a2a4e;padding:15px;margin:10px 0;border-radius:10px;'><strong style='color:#d4af37;'>{c['name']}</strong> <small>({c['created_at'][:16]})</small><br>{c['message']}<br><button onclick='deleteComment({c["id"]})' style='background:#e74c3c;color:white;border:none;padding:5px 15px;border-radius:5px;cursor:pointer;margin-top:8px;'>🗑️ حذف</button></div>"
+                    c_id = c["id"]
+                    c_name = c['name']
+                    c_date = c['created_at'][:16]
+                    c_msg = c['message']
+                    comments_html += f"<div style='background:#2a2a4e;padding:15px;margin:10px 0;border-radius:10px;'><strong style='color:#d4af37;'>{c_name}</strong> <small>({c_date})</small><br>{c_msg}<br><button onclick='deleteComment({c_id})' style='background:#e74c3c;color:white;border:none;padding:5px 15px;border-radius:5px;cursor:pointer;margin-top:8px;'>🗑️ حذف</button></div>"
             else:
                 comments_html = "<p>لا توجد تعليقات.</p>"
         except: pass
@@ -1163,6 +1167,17 @@ def admin_dashboard():
     }}
     </script>
     </body></html>"""
+
+@app.route('/admin/delete_feedback/<int:comment_id>', methods=['POST'])
+def delete_feedback(comment_id):
+    auth = request.authorization
+    if not auth or not check_auth(auth.username, auth.password):
+        return authenticate()
+    if supabase:
+        try:
+            supabase.table('feedback').delete().eq('id', comment_id).execute()
+        except: pass
+    return '', 200
 
 @app.route('/admin/delete_feedback/<int:comment_id>', methods=['POST'])
 def delete_feedback(comment_id):
