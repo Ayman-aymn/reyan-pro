@@ -1133,18 +1133,47 @@ def admin_dashboard():
                 downloads = res.data[0].get('downloads', 0)
         except: pass
     
-    return f"""<html dir='rtl'><body style='background:#1a1a2e;color:#fff;text-align:center;padding:40px;'>
+    comments_html = ""
+    if supabase:
+        try:
+            res = supabase.table('feedback').select('*').order('created_at', desc=True).execute()
+            if res.data:
+                for c in res.data:
+                    comments_html += f"<div style='background:#2a2a4e;padding:15px;margin:10px 0;border-radius:10px;'><strong style='color:#d4af37;'>{c['name']}</strong> <small>({c['created_at'][:16]})</small><br>{c['message']}<br><button onclick='deleteComment({c["id"]})' style='background:#e74c3c;color:white;border:none;padding:5px 15px;border-radius:5px;cursor:pointer;margin-top:8px;'>🗑️ حذف</button></div>"
+            else:
+                comments_html = "<p>لا توجد تعليقات.</p>"
+        except: pass
+    
+    return f"""<html dir='rtl'><body style='background:#1a1a2e;color:#fff;text-align:center;padding:40px;font-family:sans-serif;'>
     <h1>📊 إحصائيات الريان</h1>
     <div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>👁️ الزوار<br><h2 style='color:#d4af37'>{visitors}</h2></div>
     <div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>📄 الملفات<br><h2 style='color:#d4af37'>{translated}</h2></div>
     <div style='background:#2a2a4e;padding:20px;margin:20px;border-radius:10px;display:inline-block;width:200px;'>📥 التحميلات<br><h2 style='color:#d4af37'>{downloads}</h2></div>
     
+    <hr style='border:1px solid #444;margin:40px 0;'>
+    <h2 style='color:#d4af37;'>📝 إدارة التعليقات</h2>
+    <div style='text-align:right;max-width:800px;margin:auto;'>{comments_html}</div>
+    
+    <script>
+    async function deleteComment(id) {{
+        if (!confirm('هل أنت متأكد من حذف هذا التعليق؟')) return;
+        const res = await fetch('/admin/delete_feedback/' + id, {{ method: 'POST' }});
+        if (res.ok) location.reload();
+        else alert('فشل الحذف');
+    }}
+    </script>
+    </body></html>"""
 
-
-
-
-</body></html>"""
-
+@app.route('/admin/delete_feedback/<int:comment_id>', methods=['POST'])
+def delete_feedback(comment_id):
+    auth = request.authorization
+    if not auth or not check_auth(auth.username, auth.password):
+        return authenticate()
+    if supabase:
+        try:
+            supabase.table('feedback').delete().eq('id', comment_id).execute()
+        except: pass
+    return '', 200
 
 @app.route('/ad.html')
 def ad():
